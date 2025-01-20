@@ -9,22 +9,12 @@ export const metadata: Metadata = {
   description: "Free military transition planning tool for service members. Create personalized timelines for separation, terminal leave, SkillBridge, VA claims, and job search. Built by veterans for a successful military to civilian transition.",
   icons: {
     icon: [
-      { url: "/favicon.ico", sizes: "any" },
-      { url: "/images/Frame%2029.png", type: "image/png" }
-    ],
-    shortcut: [
       { url: "/favicon.ico" },
-      { url: "/images/Frame%2029.png" }
+      { url: "/images/Frame%2029.png", type: "image/png" }
     ],
     apple: [
       { url: "/images/Frame%2029.png" }
-    ],
-    other: [
-      {
-        rel: "apple-touch-icon-precomposed",
-        url: "/images/Frame%2029.png",
-      },
-    ],
+    ]
   },
   manifest: "/manifest.json",
   openGraph: {
@@ -60,11 +50,6 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark">
-      <head>
-        <link rel="icon" type="image/x-icon" href="/favicon.ico" />
-        <link rel="icon" type="image/png" href="/images/Frame%2029.png" />
-        <link rel="apple-touch-icon" href="/images/Frame%2029.png" />
-      </head>
       <body className={inter.className}>{children}</body>
     </html>
   );
