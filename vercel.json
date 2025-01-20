@@ -1,0 +1,16 @@
+{
+    "version": 2,
+    "buildCommand": "npm run build",
+    "installCommand": "npm install",
+    "framework": "nextjs",
+    "builds": [
+      {
+        "src": "package.json",
+        "use": "@vercel/next"
+      }
+    ],
+    "env": {
+      "NEXT_PUBLIC_AIRTABLE_BASE_ID": "appXmkAjMKn5ASykm",
+      "NEXT_PUBLIC_AIRTABLE_API_KEY": "patoncmkY0dLzQh6X.85999e9c56d3248e4b5e4d5914fcef4b937be0d2ab1610df310cdf4a7c9ca209"
+    }
+  } 

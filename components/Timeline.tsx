@@ -1,10 +1,24 @@
-import { useEffect, useState } from 'react';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { addMonths, format, subMonths } from 'date-fns';
+import { useState, useEffect } from 'react';
+import { HamburgerMenuIcon } from '@radix-ui/react-icons';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { SeparationDateInput } from './SeparationDateInput';
-import { TimelineBar, TimelineBarData } from './TimelineBar';
 import { ShareTimeline } from './ShareTimeline';
-import { CalendarIcon } from '@radix-ui/react-icons';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { addMonths, format, subMonths } from 'date-fns';
+import { TimelineBar, TimelineBarData } from './TimelineBar';
+import { Brain, FileText, Stethoscope, Briefcase, MoreHorizontal } from 'lucide-react';
 
 interface Task {
   id: string;
@@ -46,7 +60,7 @@ const defaultBars: TimelineBarData[] = [
     endDays: 0,
     color: '#8B5CF6',
     editable: true,
-    row: 1
+    row: 0
   },
   {
     id: 'work',
@@ -55,7 +69,7 @@ const defaultBars: TimelineBarData[] = [
     endDays: 0,
     color: '#EC4899',
     editable: true,
-    row: 2
+    row: 1
   },
   {
     id: 'skillbridge',
@@ -64,19 +78,83 @@ const defaultBars: TimelineBarData[] = [
     endDays: 0,
     color: '#3B82F6',
     editable: true,
-    row: 3
+    row: 2
   }
 ];
 
-export function Timeline() {
+const getTrackIcon = (track: string) => {
+  switch (track) {
+    case 'Mindset':
+      return <Brain className="w-4 h-4" />;
+    case 'Admin':
+      return <FileText className="w-4 h-4" />;
+    case 'Health':
+      return <Stethoscope className="w-4 h-4" />;
+    case 'Job':
+      return <Briefcase className="w-4 h-4" />;
+    case 'Misc':
+      return <MoreHorizontal className="w-4 h-4" />;
+    default:
+      return null;
+  }
+};
+
+interface UserData {
+  branch: string;
+  rankCategory: string;
+  rank: string;
+  jobCode: string;
+  location: string;
+  careerGoal: string;
+}
+
+interface TimelineProps {
+  visibleTracks?: {
+    admin: boolean;
+    mindset: boolean;
+    health: boolean;
+    job: boolean;
+    misc: boolean;
+  };
+  separationDate?: Date;
+  userData?: UserData;
+  onUpdateUserData?: (newData: UserData) => void;
+}
+
+export function Timeline({ 
+  visibleTracks, 
+  separationDate: propSeparationDate,
+  userData,
+  onUpdateUserData 
+}: TimelineProps) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [separationDate, setSeparationDate] = useState<Date>(new Date());
+  const [separationDate, setSeparationDate] = useState<Date>(propSeparationDate || new Date());
   const [timelineBars, setTimelineBars] = useState<TimelineBarData[]>(defaultBars);
   const [isEditingBars, setIsEditingBars] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showPersonalizationDialog, setShowPersonalizationDialog] = useState(false);
+  const [editingUserData, setEditingUserData] = useState<UserData | undefined>(userData);
+
+  useEffect(() => {
+    if (propSeparationDate) {
+      setSeparationDate(propSeparationDate);
+    }
+  }, [propSeparationDate]);
+
+  useEffect(() => {
+    setEditingUserData(userData);
+  }, [userData]);
+
+  const updateEditingUserData = (field: keyof UserData, value: string) => {
+    setEditingUserData(prev => prev ? {
+      ...prev,
+      [field]: value
+    } : undefined);
+  };
 
   const getMonthsData = () => {
     const months = [];
@@ -101,32 +179,61 @@ export function Timeline() {
     return months;
   };
 
-  useEffect(() => {
-    const fetchTasks = async () => {
-      try {
-        setLoading(true);
-        const res = await fetch('/api/tasks');
-        if (!res.ok) {
-          const errorData = await res.json();
-          throw new Error(errorData.details || 'Failed to fetch tasks');
-        }
-        const data = await res.json();
-        if (!Array.isArray(data)) {
-          throw new Error('Invalid response format');
-        }
+  const fetchTasks = async () => {
+    try {
+      const res = await fetch('/api/tasks');
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.details || 'Failed to fetch tasks');
+      }
+      const data = await res.json();
+      if (!Array.isArray(data)) {
+        throw new Error('Invalid response format');
+      }
+      
+      // Only update if data has changed
+      const hasDataChanged = JSON.stringify(data) !== JSON.stringify(tasks);
+      if (hasDataChanged) {
         setTasks(data);
-        setError(null);
-      } catch (err) {
-        console.error('Error fetching tasks:', err);
-        setError(err instanceof Error ? err.message : 'An error occurred while fetching tasks');
-        setTasks([]);
-      } finally {
-        setLoading(false);
+      }
+      
+      setError(null);
+    } catch (err) {
+      console.error('Error fetching tasks:', err);
+      setError(err instanceof Error ? err.message : 'An error occurred while fetching tasks');
+    }
+  };
+
+  // Initial fetch
+  useEffect(() => {
+    const loadInitialData = async () => {
+      setLoading(true);
+      await fetchTasks();
+      setLoading(false);
+    };
+    loadInitialData();
+  }, []);
+
+  // Set up polling for updates every 10 seconds
+  useEffect(() => {
+    let isSubscribed = true;
+
+    const poll = async () => {
+      if (isSubscribed) {
+        await fetchTasks();
       }
     };
 
-    fetchTasks();
-  }, []);
+    const pollInterval = setInterval(poll, 10000);
+
+    // Initial poll
+    poll();
+
+    return () => {
+      isSubscribed = false;
+      clearInterval(pollInterval);
+    };
+  }, []); // Remove tasks dependency to avoid infinite polling loop
 
   const getTasksForTrackAndMonth = (track: string, monthsLeft: number) => {
     if (!Array.isArray(tasks)) return [];
@@ -162,6 +269,18 @@ export function Timeline() {
     setTimelineBars(prevBars => [...prevBars, newBar]);
   };
 
+  const isTrackVisible = (track: string) => {
+    if (!visibleTracks) return true;
+    switch (track.toLowerCase()) {
+      case 'admin': return visibleTracks.admin;
+      case 'mindset': return visibleTracks.mindset;
+      case 'health': return visibleTracks.health;
+      case 'job': return visibleTracks.job;
+      case 'misc': return visibleTracks.misc;
+      default: return false;
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-[calc(100vh-200px)] text-gray-200">
@@ -181,131 +300,504 @@ export function Timeline() {
   const monthsData = getMonthsData();
 
   return (
-    <div className="w-full h-full bg-gray-900 text-white p-6">
-      <div className="flex justify-end items-start mb-4">
-        <div className="flex flex-col items-end gap-2">
-          <SeparationDateInput 
-            separationDate={separationDate}
-            onDateChange={setSeparationDate}
-          />
-          <ShareTimeline separationDate={separationDate} bars={timelineBars} />
-        </div>
-      </div>
-      <div className="h-[calc(100vh-200px)] bg-[#1A1B1E] text-gray-200">
-        <div className="flex justify-end items-start p-4 gap-4">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setIsEditingBars(!isEditingBars)}
-              className="px-3 py-1 text-sm bg-gray-700 hover:bg-gray-600 rounded-md transition-colors"
-            >
-              {isEditingBars ? 'Done Editing' : 'Edit Timeline Bars'}
-            </button>
-            {isEditingBars && (
-              <button
-                onClick={addNewBar}
-                className="px-3 py-1 text-sm bg-blue-600 hover:bg-blue-500 rounded-md transition-colors"
-              >
-                Add Bar
-              </button>
-            )}
+    <main className="min-h-screen bg-[#1A1B1E] relative">
+      {/* Fixed Header - Hide in initial state */}
+      {Object.values(visibleTracks || {}).some(v => v) && (
+        <div className="fixed top-0 left-0 right-0 z-50 bg-[#1A1B1E] border-b border-gray-800/60 backdrop-blur-sm bg-opacity-95 shadow-lg">
+          <div className="flex justify-between items-center px-6 py-3">
+            <div className="flex items-center gap-4">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button 
+                    className="h-9 w-9 flex items-center justify-center rounded-md bg-gray-800/90 hover:bg-gray-700/90 transition-colors border border-gray-700/50"
+                    style={{ transform: 'translateZ(0)' }}
+                  >
+                    <HamburgerMenuIcon className="h-4 w-4 text-gray-100" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-[400px] bg-[#1E1F23] border-gray-700/50">
+                  <div className="flex flex-col items-start gap-2 p-4">
+                    <span className="text-sm font-medium text-gray-400">Separation Date</span>
+                    <SeparationDateInput separationDate={separationDate} onDateChange={setSeparationDate} />
+                  </div>
+                  <DropdownMenuItem className="py-2">
+                    <button 
+                      onClick={() => setShowPersonalizationDialog(true)}
+                      className="text-left text-base text-gray-100 hover:text-gray-50 transition-colors focus:outline-none"
+                    >
+                      Personalization Settings
+                    </button>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="py-2">
+                    <button 
+                      onClick={() => setShowEditDialog(true)}
+                      className="text-left text-base text-gray-100 hover:text-gray-50 transition-colors focus:outline-none"
+                    >
+                      Edit Timeline Bars
+                    </button>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <img src="/veteran-timeline-logo.png" alt="Veteran Timeline" className="h-[38px] opacity-95" />
+            </div>
+            
+            {/* Center Feedback Message */}
+            <div className="absolute left-1/2 transform -translate-x-1/2 flex items-center">
+              <div className="text-sm text-gray-400 flex items-center gap-2">
+                <span>Have feedback? Book a chat with founder</span>
+                <a 
+                  href="https://www.linkedin.com/in/nicholas-co/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-400 hover:text-blue-300 transition-colors"
+                >
+                  Nick Co
+                </a>
+                <a 
+                  href="https://cal.com/nickco/feedback"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-gray-400 hover:text-gray-300 transition-colors"
+                >
+                  <span>here</span>
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                  </svg>
+                </a>
+              </div>
+            </div>
+
+            <div className="flex items-center">
+              <ShareTimeline separationDate={separationDate} bars={timelineBars} />
+            </div>
           </div>
         </div>
-        <div className="h-full overflow-x-auto overflow-y-auto rounded-lg">
-          <div className="relative min-w-[1200px]">
-            <table className="w-full border-collapse bg-[#1A1B1E]">
-              <thead>
-                <tr className="sticky top-0 z-50 bg-[#1A1B1E]">
-                  <th className="sticky left-0 z-50 bg-[#1A1B1E] p-2 text-left text-sm font-medium text-gray-400 uppercase tracking-wider border-b border-gray-800"></th>
-                  {monthsData.map((month, index) => (
-                    <th key={index} className="p-2 text-left font-medium tracking-wider border-b border-gray-800 bg-[#1A1B1E]">
-                      <div className="text-sm text-gray-400">{month.monthsLeft} months</div>
-                      <div className="text-base text-gray-200 font-semibold whitespace-nowrap">
-                        {month.label}
-                      </div>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-800">
-                <tr>
-                  <td className="sticky left-0 z-10 bg-[#1A1B1E] p-2"></td>
-                  <td colSpan={monthsData.length} className="relative p-0 h-32">
-                    <div className="timeline-container absolute inset-0">
-                      {timelineBars.map(bar => (
-                        <TimelineBar
-                          key={bar.id}
-                          bar={bar}
-                          separationDate={separationDate}
-                          onUpdate={handleBarUpdate}
-                          onDelete={handleBarDelete}
-                          isEditing={isEditingBars}
-                          allBars={timelineBars}
-                        />
-                      ))}
+      )}
+
+      {/* Main Content */}
+      <div>
+        <div className="min-w-[1200px]">
+          <table className="w-full border-collapse">
+            <thead className="sticky top-14 z-40">
+              <tr className="bg-[#1A1B1E]">
+                <th className="sticky left-0 z-40 bg-[#1A1B1E] p-2 text-left text-sm font-medium text-gray-400 uppercase tracking-wider border-b border-gray-800"></th>
+                {monthsData.map((month, index) => (
+                  <th key={index} className="p-2 text-left font-medium tracking-wider border-b border-gray-800 bg-[#1A1B1E]">
+                    <div className="text-sm text-gray-400">{month.monthsLeft} months</div>
+                    <div className="text-base text-gray-200 font-semibold whitespace-nowrap pb-3">
+                      {month.label}
                     </div>
-                  </td>
-                </tr>
-                {tracks.map(track => (
-                  <tr key={track} className="hover:bg-gray-900/50 transition-colors">
-                    <td className="sticky left-0 z-10 bg-[#1A1B1E] p-2 text-sm font-medium text-gray-300 whitespace-nowrap border-r border-gray-800">{track}</td>
+                  </th>
+                ))}
+              </tr>
+              <tr>
+                <th className="h-12 sticky left-0 z-40 pointer-events-none"></th>
+                {monthsData.map((_, index) => (
+                  <th key={index} className="h-12 pointer-events-none"></th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="relative divide-y divide-gray-800">
+              {/* Vertical Lines Container */}
+              <tr className="sticky top-[6.5rem] z-30 pointer-events-none">
+                <td className="sticky left-0 z-40 bg-[#1A1B1E]"></td>
+                {monthsData.map((month, index) => {
+                  // Calculate proportional position for current date line
+                  const now = new Date();
+                  const nextMonth = monthsData[index + 1]?.date;
+                  let currentDatePosition = null;
+                  
+                  // Check if current date falls within this month cell
+                  if (month.date <= now && nextMonth && nextMonth > now) {
+                    // Get the start of the current month and next month
+                    const monthStart = new Date(month.date.getFullYear(), month.date.getMonth(), 1);
+                    const monthEnd = new Date(nextMonth.getFullYear(), nextMonth.getMonth(), 1);
+                    
+                    // Calculate the total milliseconds in the month
+                    const totalMillisInMonth = monthEnd.getTime() - monthStart.getTime();
+                    
+                    // Calculate milliseconds elapsed since start of month
+                    const elapsedMillis = now.getTime() - monthStart.getTime();
+                    
+                    // Calculate the percentage through the month
+                    const percentage = (elapsedMillis / totalMillisInMonth) * 100;
+                    
+                    // Ensure the percentage is between 0 and 100
+                    currentDatePosition = `${Math.max(0, Math.min(100, percentage))}%`;
+                    
+                    console.log('Month:', month.label);
+                    console.log('Percentage:', percentage);
+                    console.log('Start:', monthStart);
+                    console.log('End:', monthEnd);
+                    console.log('Now:', now);
+                  }
+
+                  return (
+                    <td key={index} className="relative">
+                      {/* Separation Date Line (Red) */}
+                      {month.monthsLeft === 1 && (
+                        <div className="absolute top-0 right-0 w-px h-screen bg-red-500" style={{ zIndex: 35 }} />
+                      )}
+                      
+                      {/* Current Date Line (Blue) */}
+                      {currentDatePosition !== null && (
+                        <div 
+                          className="absolute top-0 w-px h-screen bg-blue-500" 
+                          style={{ 
+                            zIndex: 35,
+                            left: currentDatePosition
+                          }} 
+                        />
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+
+              {tracks.map((track, index) => {
+                const isVisible = isTrackVisible(track);
+                const isFirstTrack = index === 0;
+                const trackPadding = isFirstTrack ? "pt-4" : "";
+
+                // Base track row that's always visible
+                const trackRow = (
+                  <tr key={track} className={`hover:bg-gray-900/50 transition-colors ${trackPadding}`}>
+                    <td className="sticky left-0 z-10 bg-[#1A1B1E] p-2 text-sm font-medium text-gray-300 whitespace-nowrap border-r border-gray-800">
+                      <div className={`flex items-center gap-2 px-3 py-1.5 bg-gray-800/90 rounded-md border border-gray-700/50 w-fit ${!isVisible ? 'opacity-50' : ''}`}>
+                        {getTrackIcon(track)}
+                        <span className="uppercase tracking-wide">{track}</span>
+                      </div>
+                    </td>
                     {monthsData.map((month, index) => (
                       <td 
                         key={`${track}-${index}`} 
-                        className={`p-2 min-w-[180px] max-w-[180px] ${month.monthsLeft === 0 ? 'border-l-2 border-l-red-500' : ''}`}
+                        className={`relative min-w-[180px] max-w-[180px] ${!isVisible ? 'opacity-50' : ''}`}
                       >
-                        <div className="space-y-1">
-                          {getTasksForTrackAndMonth(track, month.monthsLeft).map(task => (
-                            <div key={task.id}>
-                              <Dialog 
-                                open={isDialogOpen && selectedTask?.id === task.id}
-                                onOpenChange={(open) => {
-                                  setIsDialogOpen(open);
-                                  if (!open) setSelectedTask(null);
-                                }}
-                              >
-                                <DialogTrigger asChild>
-                                  <button className="w-full text-left" onClick={() => {
-                                    setSelectedTask(task);
-                                    setIsDialogOpen(true);
-                                  }}>
-                                    <div className="p-2 rounded-lg bg-gray-800/50 hover:bg-gray-800 transition-colors cursor-pointer border border-gray-700/50">
-                                      <p className="text-sm text-gray-200 line-clamp-2">{task.task}</p>
-                                    </div>
-                                  </button>
-                                </DialogTrigger>
-                                <DialogContent className="bg-[#1A1B1E] text-gray-200 border-gray-700">
-                                  <DialogHeader>
-                                    <DialogTitle className="text-xl font-semibold text-gray-200">{task.task}</DialogTitle>
-                                    <DialogDescription asChild>
-                                      <div className="mt-4 space-y-4">
-                                        <p className="text-gray-300">{task.description}</p>
-                                        {task.link && (
-                                          <a 
-                                            href={task.link} 
-                                            target="_blank" 
-                                            rel="noopener noreferrer"
-                                            className="inline-flex items-center text-blue-400 hover:text-blue-300 transition-colors"
-                                          >
-                                            {task.linkedText || 'Learn More'} →
-                                          </a>
-                                        )}
+                        {isVisible && (
+                          <div className="p-2 space-y-1">
+                            {getTasksForTrackAndMonth(track, month.monthsLeft).map(task => (
+                              <div key={task.id}>
+                                <Dialog 
+                                  open={isDialogOpen && selectedTask?.id === task.id}
+                                  onOpenChange={(open) => {
+                                    setIsDialogOpen(open);
+                                    if (!open) setSelectedTask(null);
+                                  }}
+                                >
+                                  <DialogTrigger asChild>
+                                    <button className="w-full text-left" onClick={() => {
+                                      setSelectedTask(task);
+                                      setIsDialogOpen(true);
+                                    }}>
+                                      <div className="p-2 rounded-lg bg-gray-800/50 hover:bg-gray-800 transition-colors cursor-pointer border border-gray-700/50">
+                                        <p className="text-sm text-gray-200 line-clamp-2 leading-relaxed">{task.task}</p>
                                       </div>
-                                    </DialogDescription>
-                                  </DialogHeader>
-                                </DialogContent>
-                              </Dialog>
-                            </div>
-                          ))}
-                        </div>
+                                    </button>
+                                  </DialogTrigger>
+                                  <DialogContent className="bg-[#1A1B1E] text-gray-200 border-gray-700">
+                                    <DialogHeader>
+                                      <DialogTitle className="text-xl font-semibold text-gray-200">{task.task}</DialogTitle>
+                                      <DialogDescription asChild>
+                                        <div className="mt-4 space-y-4">
+                                          <p className="text-gray-300">{task.description}</p>
+                                          {task.link && (
+                                            <a 
+                                              href={task.link} 
+                                              target="_blank" 
+                                              rel="noopener noreferrer"
+                                              className="inline-flex items-center text-blue-400 hover:text-blue-300 transition-colors"
+                                            >
+                                              {task.linkedText || 'Learn More'} →
+                                            </a>
+                                          )}
+                                        </div>
+                                      </DialogDescription>
+                                    </DialogHeader>
+                                  </DialogContent>
+                                </Dialog>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </td>
                     ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                );
+
+                // Special handling for tracks with bars
+                if (track === 'Admin' && isVisible) {
+                  return (
+                    <>
+                      <tr key="terminal-leave-timeline" className="hover:bg-gray-900/50 transition-colors">
+                        <td className="sticky left-0 z-10 bg-[#1A1B1E] border-r border-gray-800"></td>
+                        <td colSpan={monthsData.length} className="relative p-0 h-8">
+                          <div className="timeline-container absolute inset-0">
+                            {timelineBars
+                              .filter(bar => bar.id === 'terminal' && !bar.hidden)
+                              .map(bar => (
+                                <TimelineBar
+                                  key={bar.id}
+                                  bar={{...bar, row: 0}}
+                                  separationDate={separationDate}
+                                  onUpdate={handleBarUpdate}
+                                  onDelete={handleBarDelete}
+                                  isEditing={isEditingBars}
+                                  allBars={timelineBars.filter(b => b.id === 'terminal')}
+                                />
+                              ))}
+                          </div>
+                        </td>
+                      </tr>
+                      {trackRow}
+                    </>
+                  );
+                }
+
+                if (track === 'Job' && isVisible) {
+                  return (
+                    <>
+                      <tr key="job-timeline-bars" className="hover:bg-gray-900/50 transition-colors">
+                        <td className="sticky left-0 z-10 bg-[#1A1B1E] border-r border-gray-800"></td>
+                        <td colSpan={monthsData.length} className="relative p-0 h-16">
+                          <div className="timeline-container absolute inset-0">
+                            {timelineBars
+                              .filter(bar => (bar.id === 'work' || bar.id === 'skillbridge') && !bar.hidden)
+                              .map(bar => (
+                                <TimelineBar
+                                  key={bar.id}
+                                  bar={{...bar, row: bar.id === 'work' ? 0 : 1}}
+                                  separationDate={separationDate}
+                                  onUpdate={handleBarUpdate}
+                                  onDelete={handleBarDelete}
+                                  isEditing={isEditingBars}
+                                  allBars={timelineBars.filter(b => b.id === 'work' || b.id === 'skillbridge')}
+                                />
+                              ))}
+                          </div>
+                        </td>
+                      </tr>
+                      {trackRow}
+                    </>
+                  );
+                }
+
+                if (track === 'Health' && isVisible) {
+                  return (
+                    <>
+                      <tr key="health-timeline-bars" className="hover:bg-gray-900/50 transition-colors">
+                        <td className="sticky left-0 z-10 bg-[#1A1B1E] border-r border-gray-800"></td>
+                        <td colSpan={monthsData.length} className="relative p-0 h-8">
+                          <div className="timeline-container absolute inset-0">
+                            {timelineBars
+                              .filter(bar => (bar.id === 'bdd' || bar.id === 'disability') && !bar.hidden)
+                              .map(bar => (
+                                <TimelineBar
+                                  key={bar.id}
+                                  bar={{...bar, row: bar.id === 'bdd' ? 0 : 0}}
+                                  separationDate={separationDate}
+                                  onUpdate={handleBarUpdate}
+                                  onDelete={handleBarDelete}
+                                  isEditing={isEditingBars}
+                                  allBars={timelineBars.filter(b => b.id === 'bdd' || b.id === 'disability')}
+                                />
+                              ))}
+                          </div>
+                        </td>
+                      </tr>
+                      {trackRow}
+                    </>
+                  );
+                }
+
+                return trackRow;
+              })}
+            </tbody>
+          </table>
         </div>
       </div>
-    </div>
+
+      {/* Only show edit dialog when tracks are visible */}
+      {Object.values(visibleTracks || {}).some(v => v) && (
+        <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+          <DialogContent className="bg-[#1A1B1E] text-gray-200 border-gray-700 max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-semibold text-gray-200">Edit Timeline Bars</DialogTitle>
+              <DialogDescription className="text-gray-400">
+                Manage visibility and customize timeline bars
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 mt-4">
+              {timelineBars
+                .filter(bar => bar.editable)
+                .map(bar => (
+                <div key={bar.id} className="flex items-start gap-4 p-4 rounded-lg bg-gray-800/50 border border-gray-700/50">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: bar.color }}></div>
+                      <h3 className="font-medium text-gray-200">{bar.name}</h3>
+                    </div>
+                    <div className="mt-2 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <label className="text-sm text-gray-400">Start Days:</label>
+                        <input
+                          type="number"
+                          value={bar.startDays}
+                          onChange={(e) => handleBarUpdate({
+                            ...bar,
+                            startDays: parseInt(e.target.value)
+                          })}
+                          className="bg-gray-900 border border-gray-700 rounded px-2 py-1 text-sm text-gray-200"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <label className="text-sm text-gray-400">End Days:</label>
+                        <input
+                          type="number"
+                          value={bar.endDays}
+                          onChange={(e) => handleBarUpdate({
+                            ...bar,
+                            endDays: parseInt(e.target.value)
+                          })}
+                          className="bg-gray-900 border border-gray-700 rounded px-2 py-1 text-sm text-gray-200"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleBarUpdate({
+                        ...bar,
+                        hidden: !bar.hidden
+                      })}
+                      className={`h-8 px-3 text-sm font-medium rounded transition-all duration-200 border ${
+                        bar.hidden
+                          ? 'border-gray-600 bg-gray-700/50 text-gray-400'
+                          : 'border-blue-500/30 bg-blue-600/90 text-blue-50 hover:bg-blue-500/90'
+                      }`}
+                    >
+                      {bar.hidden ? 'Show' : 'Hide'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Personalization Settings Dialog */}
+      <Dialog open={showPersonalizationDialog} onOpenChange={setShowPersonalizationDialog}>
+        <DialogContent className="bg-[#1A1B1E] text-gray-200 border-gray-700 max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-semibold text-gray-200">Personalization Settings</DialogTitle>
+            <DialogDescription className="text-gray-400">
+              Review and update your transition preferences
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6 mt-4">
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">Branch of Service</label>
+                <select
+                  value={editingUserData?.branch}
+                  onChange={(e) => updateEditingUserData('branch', e.target.value)}
+                  className="w-full p-3 bg-gray-800 border border-gray-700 rounded-lg text-gray-200"
+                >
+                  {['Army', 'Navy', 'Air Force', 'Marines', 'Coast Guard', 'Space Force'].map((branch) => (
+                    <option key={branch} value={branch}>{branch}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">Rank</label>
+                <select
+                  value={editingUserData?.rank}
+                  onChange={(e) => updateEditingUserData('rank', e.target.value)}
+                  className="w-full p-3 bg-gray-800 border border-gray-700 rounded-lg text-gray-200"
+                >
+                  <option value="">Select Rank</option>
+                  <optgroup label="Enlisted">
+                    {['E-1', 'E-2', 'E-3', 'E-4', 'E-5', 'E-6', 'E-7', 'E-8', 'E-9'].map((rank) => (
+                      <option key={rank} value={rank}>{rank}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Warrant Officer">
+                    {['W-1', 'W-2', 'W-3', 'W-4', 'W-5'].map((rank) => (
+                      <option key={rank} value={rank}>{rank}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Officer">
+                    {['O-1', 'O-2', 'O-3', 'O-4', 'O-5', 'O-6', 'O-7', 'O-8', 'O-9', 'O-10'].map((rank) => (
+                      <option key={rank} value={rank}>{rank}</option>
+                    ))}
+                  </optgroup>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">
+                  {editingUserData?.branch === 'Air Force' ? 'Air Force Specialty Code' :
+                   editingUserData?.branch === 'Navy' ? (editingUserData?.rankCategory === 'Warrant Officer' || editingUserData?.rank?.startsWith('O') ? 'Designator' : 'Rating') :
+                   editingUserData?.branch === 'Army' && editingUserData?.rankCategory === 'Warrant Officer' ? 'Warrant Officer Military Occupational Specialty (WOMOS)' :
+                   editingUserData?.branch === 'Coast Guard' && editingUserData?.rankCategory === 'Warrant Officer' ? 'Specialty' :
+                   editingUserData?.branch === 'Coast Guard' ? 'Rating' :
+                   editingUserData?.branch === 'Space Force' ? 'Space Force Specialty Code' :
+                   'Military Occupational Specialty (MOS)'}
+                </label>
+                <input
+                  type="text"
+                  value={editingUserData?.jobCode || ''}
+                  onChange={(e) => updateEditingUserData('jobCode', e.target.value)}
+                  placeholder="Enter your code"
+                  className="w-full p-3 bg-gray-800 border border-gray-700 rounded-lg text-gray-200"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">Post-Military Location</label>
+                <select
+                  value={editingUserData?.location}
+                  onChange={(e) => updateEditingUserData('location', e.target.value)}
+                  className="w-full p-3 bg-gray-800 border border-gray-700 rounded-lg text-gray-200"
+                >
+                  {['Stay Current Location', 'Return to Home of Record', 'New Location', 'Undecided'].map((location) => (
+                    <option key={location} value={location}>{location}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">Career Goal</label>
+                <select
+                  value={editingUserData?.careerGoal}
+                  onChange={(e) => updateEditingUserData('careerGoal', e.target.value)}
+                  className="w-full p-3 bg-gray-800 border border-gray-700 rounded-lg text-gray-200"
+                >
+                  {['Further Education', 'Private Sector Job', 'Government/Federal Job', 'Entrepreneurship', 'Undecided'].map((goal) => (
+                    <option key={goal} value={goal}>{goal}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowPersonalizationDialog(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-400 hover:text-gray-300 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (onUpdateUserData && editingUserData) {
+                    onUpdateUserData(editingUserData);
+                  }
+                  setShowPersonalizationDialog(false);
+                }}
+                className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-500 transition-colors"
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </main>
   );
 } 
