@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { HamburgerMenuIcon } from '@radix-ui/react-icons';
 import {
   DropdownMenu,
@@ -132,12 +132,12 @@ interface TimelineProps {
   onUpdateUserData?: (newData: UserData) => void;
 }
 
-export function Timeline({ 
+const Timeline: React.FC<TimelineProps> = ({ 
   visibleTracks, 
   separationDate: propSeparationDate,
   userData,
   onUpdateUserData 
-}: TimelineProps) {
+}) => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -502,30 +502,30 @@ export function Timeline({
                 })}
               </tr>
 
-              {tracks.map((track, index) => {
+              {tracks.map((track, trackIndex) => {
                 const isVisible = isTrackVisible(track);
-                const isFirstTrack = index === 0;
+                const isFirstTrack = trackIndex === 0;
                 const trackPadding = isFirstTrack ? "pt-4" : "";
 
-                // Base track row that's always visible
-                const trackRow = (
-                  <tr key={track} className={`hover:bg-gray-900/50 transition-colors ${trackPadding}`}>
+                const renderTrackRow = () => (
+                  <tr key={`${track}-${trackIndex}`} className={`hover:bg-gray-900/50 transition-colors ${trackPadding}`}>
                     <td className="sticky left-0 z-50 bg-[#1A1B1E] p-2 text-sm font-medium text-gray-300 whitespace-nowrap border-r border-gray-800">
                       <div className={`flex items-center gap-2 px-3 py-1.5 bg-gray-800/90 rounded-md border border-gray-700/50 w-fit ${!isVisible ? 'opacity-50' : ''}`}>
                         {getTrackIcon(track)}
                         <span className="uppercase tracking-wide">{track}</span>
                       </div>
                     </td>
-                    {monthsData.map((month, index) => (
+                    {monthsData.map((month, monthIndex) => (
                       <td 
-                        key={`${track}-${index}`} 
+                        key={`${track}-${month.monthsLeft}-${monthIndex}`} 
                         className={`relative min-w-[180px] max-w-[180px] ${!isVisible ? 'opacity-50' : ''}`}
                       >
                         {isVisible && (
                           <div className="p-2 space-y-1">
                             {getTasksForTrackAndMonth(track, month.monthsLeft).map(task => (
-                              <div key={task.id}>
+                              <div key={`${task.id}-${month.monthsLeft}`}>
                                 <Dialog 
+                                  key={`dialog-${task.id}`}
                                   open={isDialogOpen && selectedTask?.id === task.id}
                                   onOpenChange={(open) => {
                                     setIsDialogOpen(open);
@@ -575,7 +575,7 @@ export function Timeline({
                 // Special handling for tracks with bars
                 if (track === 'Admin' && isVisible) {
                   return (
-                    <>
+                    <React.Fragment key={`${track}-container`}>
                       <tr key="terminal-leave-timeline" className="hover:bg-gray-900/50 transition-colors">
                         <td className="sticky left-0 z-10 bg-[#1A1B1E] border-r border-gray-800"></td>
                         <td colSpan={monthsData.length} className="relative p-0 h-8">
@@ -584,7 +584,7 @@ export function Timeline({
                               .filter(bar => bar.id === 'terminal' && !bar.hidden)
                               .map(bar => (
                                 <TimelineBar
-                                  key={bar.id}
+                                  key={`${bar.id}-${bar.row}`}
                                   bar={{...bar, row: 0}}
                                   separationDate={separationDate}
                                   onUpdate={handleBarUpdate}
@@ -596,14 +596,14 @@ export function Timeline({
                           </div>
                         </td>
                       </tr>
-                      {trackRow}
-                    </>
+                      {renderTrackRow()}
+                    </React.Fragment>
                   );
                 }
 
                 if (track === 'Job' && isVisible) {
                   return (
-                    <>
+                    <React.Fragment key={`${track}-container`}>
                       <tr key="job-timeline-bars" className="hover:bg-gray-900/50 transition-colors">
                         <td className="sticky left-0 z-10 bg-[#1A1B1E] border-r border-gray-800"></td>
                         <td colSpan={monthsData.length} className="relative p-0 h-16">
@@ -612,7 +612,7 @@ export function Timeline({
                               .filter(bar => (bar.id === 'work' || bar.id === 'skillbridge') && !bar.hidden)
                               .map(bar => (
                                 <TimelineBar
-                                  key={bar.id}
+                                  key={`${bar.id}-${bar.row}`}
                                   bar={{...bar, row: bar.id === 'work' ? 0 : 1}}
                                   separationDate={separationDate}
                                   onUpdate={handleBarUpdate}
@@ -624,14 +624,14 @@ export function Timeline({
                           </div>
                         </td>
                       </tr>
-                      {trackRow}
-                    </>
+                      {renderTrackRow()}
+                    </React.Fragment>
                   );
                 }
 
                 if (track === 'Health' && isVisible) {
                   return (
-                    <>
+                    <React.Fragment key={`${track}-container`}>
                       <tr key="health-timeline-bars" className="hover:bg-gray-900/50 transition-colors">
                         <td className="sticky left-0 z-10 bg-[#1A1B1E] border-r border-gray-800"></td>
                         <td colSpan={monthsData.length} className="relative p-0 h-8">
@@ -640,7 +640,7 @@ export function Timeline({
                               .filter(bar => (bar.id === 'bdd' || bar.id === 'disability') && !bar.hidden)
                               .map(bar => (
                                 <TimelineBar
-                                  key={bar.id}
+                                  key={`${bar.id}-${bar.row}`}
                                   bar={{...bar, row: bar.id === 'bdd' ? 0 : 0}}
                                   separationDate={separationDate}
                                   onUpdate={handleBarUpdate}
@@ -652,12 +652,12 @@ export function Timeline({
                           </div>
                         </td>
                       </tr>
-                      {trackRow}
-                    </>
+                      {renderTrackRow()}
+                    </React.Fragment>
                   );
                 }
 
-                return trackRow;
+                return renderTrackRow();
               })}
             </tbody>
           </table>
@@ -678,7 +678,7 @@ export function Timeline({
               {timelineBars
                 .filter(bar => bar.editable)
                 .map(bar => (
-                <div key={bar.id} className="flex items-start gap-4 p-4 rounded-lg bg-gray-800/50 border border-gray-700/50">
+                <div key={`${bar.id}-edit`} className="flex items-start gap-4 p-4 rounded-lg bg-gray-800/50 border border-gray-700/50">
                   <div className="flex-1">
                     <div className="flex items-center gap-3">
                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: bar.color }}></div>
@@ -848,4 +848,7 @@ export function Timeline({
       </Dialog>
     </div>
   );
-} 
+};
+
+export { Timeline };
+export default Timeline; 

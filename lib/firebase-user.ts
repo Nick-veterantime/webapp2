@@ -34,9 +34,14 @@ export async function updateUserData(userData: Partial<UserData>) {
     const userDoc = await getDoc(userRef);
     const existingData = userDoc.exists() ? userDoc.data() as UserData : null;
     
+    // Filter out undefined values
+    const cleanedUserData = Object.fromEntries(
+      Object.entries(userData).filter(([_, value]) => value !== undefined)
+    );
+
     await setDoc(userRef, {
       ...existingData,
-      ...userData,
+      ...cleanedUserData,
       updatedAt: now,
       // Only set createdAt if this is a new document
       ...(existingData ? {} : { createdAt: now })

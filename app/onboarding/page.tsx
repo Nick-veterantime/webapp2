@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronRight, ChevronLeft } from 'lucide-react';
 import { Timeline } from '@/components/Timeline';
+import { Metadata } from 'next';
 
 interface OnboardingStep {
   id: number;

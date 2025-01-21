@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { BranchSelection } from '@/components/BranchSelection';
 import { AuthForm } from '@/components/AuthForm';
 import { Timeline } from '@/components/Timeline';
@@ -15,6 +15,17 @@ import { updateUserData } from '@/lib/firebase-user';
 import { toast } from 'sonner';
 import { LocationSelector } from '@/components/LocationSelector';
 import { State, states } from '@/lib/constants';
+import dynamic from 'next/dynamic';
+
+// Dynamically import Timeline with no SSR
+const DynamicTimeline = dynamic(() => import('@/components/Timeline').then(mod => ({ default: mod.Timeline })), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-screen flex items-center justify-center">
+      <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500"></div>
+    </div>
+  )
+});
 
 interface UserData {
   branch: string;
@@ -222,7 +233,7 @@ export default function Home() {
       {/* Background Timeline */}
       <div className="absolute inset-0 hidden sm:block">
         <div className={`transition-opacity duration-500 ${currentStep > 1 ? 'opacity-20 pointer-events-none' : 'opacity-40'}`}>
-          <Timeline 
+          <DynamicTimeline 
             visibleTracks={currentStep > 1 ? getOnboardingTimelineData().visibleTracks : defaultTimelineData.visibleTracks}
             separationDate={currentStep > 1 ? getOnboardingTimelineData().separationDate : defaultTimelineData.separationDate}
             userData={currentStep > 1 ? getOnboardingTimelineData().userData : defaultTimelineData.userData}
