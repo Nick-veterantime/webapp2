@@ -17,7 +17,11 @@ export function SignIn() {
       router.push('/timeline');
     } catch (error: any) {
       console.error('Error signing in:', error);
-      toast.error(error.message || 'Failed to sign in');
+      if (error.code === 'auth/invalid-credential') {
+        toast.error('Invalid email or password');
+      } else {
+        toast.error('Failed to sign in. Please try again.');
+      }
     }
   };
 
@@ -30,7 +34,22 @@ export function SignIn() {
       }
     } catch (error: any) {
       console.error('Error signing in with Google:', error);
-      toast.error(error.message || 'Failed to sign in with Google');
+      
+      // Handle specific error cases
+      switch (error.code) {
+        case 'auth/popup-closed-by-user':
+        case 'auth/cancelled-popup-request':
+          // User closed the popup, no need to show error
+          break;
+        case 'auth/unauthorized-domain':
+          toast.error('This domain is not authorized for sign-in. Please try again later.');
+          break;
+        case 'auth/popup-blocked':
+          toast.error('Pop-up was blocked by your browser. Please allow pop-ups and try again.');
+          break;
+        default:
+          toast.error('Failed to sign in with Google. Please try again.');
+      }
     }
   };
 
