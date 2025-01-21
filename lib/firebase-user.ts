@@ -1,8 +1,35 @@
-import { auth } from './firebase';
-import { getFirestore, doc, setDoc, getDoc } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, getDoc, Firestore } from 'firebase/firestore';
 import { State } from './constants';
+import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
+import { getAuth, Auth } from 'firebase/auth';
 
-const db = getFirestore();
+// Initialize Firebase if not already initialized
+let app: FirebaseApp;
+let db: Firestore;
+let auth: Auth;
+
+async function initializeFirebase() {
+  if (!getApps().length) {
+    try {
+      const response = await fetch('/api/firebase-config');
+      const firebaseConfig = await response.json();
+      app = initializeApp(firebaseConfig);
+    } catch (error) {
+      console.error('Error initializing Firebase:', error);
+      throw error;
+    }
+  } else {
+    app = getApp();
+  }
+  
+  db = getFirestore(app);
+  auth = getAuth(app);
+}
+
+// Initialize Firebase on the client side
+if (typeof window !== 'undefined') {
+  initializeFirebase();
+}
 
 export interface UserData {
   branch: string;
@@ -21,13 +48,12 @@ export interface UserData {
 }
 
 export async function updateUserData(userData: Partial<UserData>) {
-  const user = auth.currentUser;
-  if (!user) {
+  if (!auth?.currentUser) {
     throw new Error('No user is signed in');
   }
 
   try {
-    const userRef = doc(db, 'users', user.uid);
+    const userRef = doc(db, 'users', auth.currentUser.uid);
     const now = new Date().toISOString();
     
     // Get existing data first
@@ -45,7 +71,7 @@ export async function updateUserData(userData: Partial<UserData>) {
       updatedAt: now,
       // Only set createdAt if this is a new document
       ...(existingData ? {} : { createdAt: now })
-    }, { merge: true });
+    });
   } catch (error) {
     console.error('Error updating user data:', error);
     throw error;
@@ -53,13 +79,12 @@ export async function updateUserData(userData: Partial<UserData>) {
 }
 
 export async function getUserData(): Promise<UserData | null> {
-  const user = auth.currentUser;
-  if (!user) {
+  if (!auth?.currentUser) {
     return null;
   }
 
   try {
-    const userRef = doc(db, 'users', user.uid);
+    const userRef = doc(db, 'users', auth.currentUser.uid);
     const userDoc = await getDoc(userRef);
     
     if (userDoc.exists()) {
