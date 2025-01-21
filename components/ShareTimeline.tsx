@@ -60,35 +60,37 @@ export function ShareTimeline({ separationDate, bars }: ShareTimelineProps) {
     return lines.join('\n');
   };
 
-  const handleQuickShare = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    const text = compileShareText();
+  const handleQuickShare = async () => {
     try {
-      await navigator.clipboard.writeText(text);
+      const shareText = compileShareText();
+      await navigator.clipboard.writeText(shareText);
       setIsCopied(true);
-      setTimeout(() => {
-        setIsCopied(false);
-      }, 2000);
-    } catch (err) {
-      console.error('Failed to copy to clipboard:', err);
+      setTimeout(() => setIsCopied(false), 2000);
+    } catch (error) {
+      console.error('Error copying to clipboard:', error);
     }
   };
 
-  const handleCustomShare = async () => {
-    const text = compileShareText();
+  const handleShare = async () => {
     try {
-      await navigator.clipboard.writeText(text);
-      setIsCopied(true);
-      setTimeout(() => {
-        setIsCopied(false);
-        setIsOpen(false);
-      }, 1500);
-    } catch (err) {
-      console.error('Failed to copy to clipboard:', err);
+      const shareText = compileShareText();
+      if (navigator.share) {
+        await navigator.share({
+          title: 'My Veteran Timeline',
+          text: shareText,
+          url: window.location.href,
+        });
+      } else {
+        await navigator.clipboard.writeText(shareText);
+        setIsCopied(true);
+        setTimeout(() => setIsCopied(false), 2000);
+      }
+    } catch (error) {
+      console.error('Error sharing:', error);
     }
+    setIsOpen(false);
   };
 
-  // Handle click outside and escape key
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (popupRef.current && !popupRef.current.contains(event.target as Node)) {
@@ -96,22 +98,9 @@ export function ShareTimeline({ separationDate, bars }: ShareTimelineProps) {
       }
     };
 
-    const handleEscapeKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setIsOpen(false);
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      document.addEventListener('keydown', handleEscapeKey);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleEscapeKey);
-    };
-  }, [isOpen]);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   return (
     <div className="relative">
@@ -160,35 +149,19 @@ export function ShareTimeline({ separationDate, bars }: ShareTimelineProps) {
               ))}
             </div>
 
-            <div className="flex flex-col items-end gap-2">
-              <div className="flex justify-end space-x-3">
-                <button
-                  onClick={() => setIsOpen(false)}
-                  className="px-4 py-2 text-sm font-medium bg-gray-800/50 text-gray-300 hover:bg-gray-700/50 hover:text-gray-100 rounded-md transition-all duration-200 border border-gray-700/50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleCustomShare}
-                  className="px-4 py-2 text-sm font-medium bg-[#4CCEAD]/20 text-[#4CCEAD] hover:bg-[#4CCEAD]/30 rounded-md transition-all duration-200 flex items-center gap-2"
-                >
-                  <Share2 className="w-4 h-4" />
-                  Share Timeline
-                </button>
-              </div>
-              <AnimatePresence>
-                {isCopied && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0 }}
-                    className="text-sm text-[#4CCEAD] flex items-center gap-1"
-                  >
-                    <Check className="w-3 h-3" />
-                    Timeline copied
-                  </motion.div>
-                )}
-              </AnimatePresence>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setIsOpen(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-400 hover:text-gray-300 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleShare}
+                className="px-4 py-2 text-sm font-medium bg-[#4CCEAD] text-white rounded-lg hover:bg-[#4CCEAD]/90 transition-colors"
+              >
+                Share Timeline
+              </button>
             </div>
           </div>
         </div>

@@ -1,3 +1,5 @@
+'use client';
+
 import { useState, useEffect } from 'react';
 import { HamburgerMenuIcon } from '@radix-ui/react-icons';
 import {
@@ -8,6 +10,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { SeparationDateInput } from './SeparationDateInput';
 import { ShareTimeline } from './ShareTimeline';
+import { NavigationMenu } from './NavigationMenu';
 import {
   Dialog,
   DialogContent,
@@ -18,7 +21,8 @@ import {
 } from '@/components/ui/dialog';
 import { addMonths, format, subMonths } from 'date-fns';
 import { TimelineBar, TimelineBarData } from './TimelineBar';
-import { Brain, FileText, Stethoscope, Briefcase, MoreHorizontal } from 'lucide-react';
+import { Brain, FileText, Stethoscope, Briefcase, MoreHorizontal, Share2 } from 'lucide-react';
+import { State } from '../lib/constants';
 
 interface Task {
   id: string;
@@ -104,8 +108,15 @@ interface UserData {
   rankCategory: string;
   rank: string;
   jobCode: string;
-  location: string;
+  locationPreference: string;
+  locationType?: 'CONUS' | 'OCONUS';
+  location?: string;
+  consideringAreas?: State[];
+  locationAdditionalInfo?: string;
   careerGoal: string;
+  separationDate: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 interface TimelineProps {
@@ -133,17 +144,58 @@ export function Timeline({
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [separationDate, setSeparationDate] = useState<Date>(propSeparationDate || new Date());
-  const [timelineBars, setTimelineBars] = useState<TimelineBarData[]>(defaultBars);
+  const [timelineBars, setTimelineBars] = useState<TimelineBarData[]>([]);
   const [isEditingBars, setIsEditingBars] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showPersonalizationDialog, setShowPersonalizationDialog] = useState(false);
   const [editingUserData, setEditingUserData] = useState<UserData | undefined>(userData);
 
   useEffect(() => {
+    setTimelineBars(defaultBars);
+  }, []);
+
+  useEffect(() => {
     if (propSeparationDate) {
       setSeparationDate(propSeparationDate);
+      
+      // Reset timeline bars with default values when separation date changes
+      setTimelineBars(defaultBars.map(bar => {
+        // Keep existing bar state if it exists
+        const existingBar = timelineBars.find(existing => existing.id === bar.id);
+        if (existingBar) {
+          return {
+            ...bar,
+            hidden: existingBar.hidden,
+            startDays: existingBar.startDays,
+            endDays: existingBar.endDays
+          };
+        }
+        return bar;
+      }));
     }
   }, [propSeparationDate]);
+
+  useEffect(() => {
+    if (userData?.separationDate) {
+      const newDate = new Date(userData.separationDate);
+      setSeparationDate(newDate);
+      
+      // Reset timeline bars with default values when separation date changes
+      setTimelineBars(defaultBars.map(bar => {
+        // Keep existing bar state if it exists
+        const existingBar = timelineBars.find(existing => existing.id === bar.id);
+        if (existingBar) {
+          return {
+            ...bar,
+            hidden: existingBar.hidden,
+            startDays: existingBar.startDays,
+            endDays: existingBar.endDays
+          };
+        }
+        return bar;
+      }));
+    }
+  }, [userData]);
 
   useEffect(() => {
     setEditingUserData(userData);
@@ -249,7 +301,17 @@ export function Timeline({
 
   const handleBarUpdate = (updatedBar: TimelineBarData) => {
     setTimelineBars(bars => 
-      bars.map(bar => bar.id === updatedBar.id ? updatedBar : bar)
+      bars.map(bar => {
+        if (bar.id === updatedBar.id) {
+          return {
+            ...bar,
+            ...updatedBar,
+            // Ensure we maintain the row property
+            row: bar.row
+          };
+        }
+        return bar;
+      })
     );
   };
 
@@ -281,6 +343,24 @@ export function Timeline({
     }
   };
 
+  const handleShare = async () => {
+    try {
+      const shareUrl = window.location.href;
+      if (navigator.share) {
+        await navigator.share({
+          title: 'Veteran Timeline',
+          text: 'Check out my veteran transition timeline!',
+          url: shareUrl,
+        });
+      } else {
+        await navigator.clipboard.writeText(shareUrl);
+        // You might want to add a toast notification here to indicate successful copy
+      }
+    } catch (error) {
+      console.error('Error sharing:', error);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-[calc(100vh-200px)] text-gray-200">
@@ -300,89 +380,63 @@ export function Timeline({
   const monthsData = getMonthsData();
 
   return (
-    <main className="min-h-screen bg-[#1A1B1E] relative">
-      {/* Fixed Header - Hide in initial state */}
-      {Object.values(visibleTracks || {}).some(v => v) && (
-        <div className="fixed top-0 left-0 right-0 z-50 bg-[#1A1B1E] border-b border-gray-800/60 backdrop-blur-sm bg-opacity-95 shadow-lg">
-          <div className="flex justify-between items-center px-6 py-3">
-            <div className="flex items-center gap-4">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button 
-                    className="h-9 w-9 flex items-center justify-center rounded-md bg-gray-800/90 hover:bg-gray-700/90 transition-colors border border-gray-700/50"
-                    style={{ transform: 'translateZ(0)' }}
-                  >
-                    <HamburgerMenuIcon className="h-4 w-4 text-gray-100" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-[400px] bg-[#1E1F23] border-gray-700/50">
-                  <div className="flex flex-col items-start gap-2 p-4">
-                    <span className="text-sm font-medium text-gray-400">Separation Date</span>
-                    <SeparationDateInput separationDate={separationDate} onDateChange={setSeparationDate} />
-                  </div>
-                  <DropdownMenuItem className="py-2">
-                    <button 
-                      onClick={() => setShowPersonalizationDialog(true)}
-                      className="text-left text-base text-gray-100 hover:text-gray-50 transition-colors focus:outline-none"
-                    >
-                      Personalization Settings
-                    </button>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem className="py-2">
-                    <button 
-                      onClick={() => setShowEditDialog(true)}
-                      className="text-left text-base text-gray-100 hover:text-gray-50 transition-colors focus:outline-none"
-                    >
-                      Edit Timeline Bars
-                    </button>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <img src="/veteran-timeline-logo.png" alt="Veteran Timeline" className="h-[38px] opacity-95" />
-            </div>
-            
-            {/* Center Feedback Message */}
-            <div className="absolute left-1/2 transform -translate-x-1/2 flex items-center">
-              <div className="text-sm text-gray-400 flex items-center gap-2">
-                <span>Have feedback? Book a chat with founder</span>
-                <a 
-                  href="https://www.linkedin.com/in/nicholas-co/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-400 hover:text-blue-300 transition-colors"
-                >
-                  Nick Co
-                </a>
-                <a 
-                  href="https://cal.com/nickco/feedback"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-gray-400 hover:text-gray-300 transition-colors"
-                >
-                  <span>here</span>
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                  </svg>
-                </a>
-              </div>
-            </div>
-
-            <div className="flex items-center">
-              <ShareTimeline separationDate={separationDate} bars={timelineBars} />
-            </div>
-          </div>
+    <div className="min-h-screen bg-[#121212] flex flex-col">
+      {/* Header */}
+      <div className="flex justify-between items-center px-6 py-3 bg-[#1A1B1E] border-b border-gray-800">
+        {/* Left side - Logo */}
+        <div className="flex items-center">
+          <img src="/veteran-timeline-logo.png" alt="Veteran Timeline" className="h-[48px]" />
         </div>
-      )}
+
+        {/* Center - Feedback text */}
+        <div className="text-gray-300">
+          Have feedback? Book a chat with founder{' '}
+          <a 
+            href="https://www.linkedin.com/in/nicholas-co/" 
+            className="text-blue-400 hover:text-blue-300"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Nick Co
+          </a>
+          {' '}→{' '}
+          <a 
+            href="https://cal.com/nickco/feedback"
+            className="text-blue-400 hover:text-blue-300"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            here
+          </a>
+          {' '}
+        </div>
+
+        {/* Right side - Share button and nav */}
+        <div className="flex items-center gap-4">
+          <ShareTimeline 
+            separationDate={separationDate}
+            bars={timelineBars}
+          />
+          <NavigationMenu 
+            userData={userData} 
+            onUpdateUserData={onUpdateUserData} 
+            timelineBars={timelineBars}
+            onUpdateTimelineBars={setTimelineBars}
+          />
+        </div>
+      </div>
 
       {/* Main Content */}
-      <div>
+      <div className="flex-1 overflow-auto">
         <div className="min-w-[1200px]">
           <table className="w-full border-collapse">
-            <thead className="sticky top-14 z-40">
+            <thead className="sticky top-0 z-40">
               <tr className="bg-[#1A1B1E]">
-                <th className="sticky left-0 z-40 bg-[#1A1B1E] p-2 text-left text-sm font-medium text-gray-400 uppercase tracking-wider border-b border-gray-800"></th>
+                <th className="sticky left-0 z-40 bg-[#1A1B1E] p-2 text-left text-sm font-medium text-gray-400 uppercase tracking-wider border-b border-gray-800 w-[200px]">
+                  {/* Track header cell */}
+                </th>
                 {monthsData.map((month, index) => (
-                  <th key={index} className="p-2 text-left font-medium tracking-wider border-b border-gray-800 bg-[#1A1B1E]">
+                  <th key={index} className="p-2 text-left font-medium tracking-wider border-b border-gray-800 bg-[#1A1B1E] min-w-[180px]">
                     <div className="text-sm text-gray-400">{month.monthsLeft} months</div>
                     <div className="text-base text-gray-200 font-semibold whitespace-nowrap pb-3">
                       {month.label}
@@ -390,17 +444,11 @@ export function Timeline({
                   </th>
                 ))}
               </tr>
-              <tr>
-                <th className="h-12 sticky left-0 z-40 pointer-events-none"></th>
-                {monthsData.map((_, index) => (
-                  <th key={index} className="h-12 pointer-events-none"></th>
-                ))}
-              </tr>
             </thead>
             <tbody className="relative divide-y divide-gray-800">
               {/* Vertical Lines Container */}
-              <tr className="sticky top-[6.5rem] z-30 pointer-events-none">
-                <td className="sticky left-0 z-40 bg-[#1A1B1E]"></td>
+              <tr className="sticky top-[6.5rem] z-20 pointer-events-none">
+                <td className="sticky left-0 z-50 bg-[#1A1B1E]"></td>
                 {monthsData.map((month, index) => {
                   // Calculate proportional position for current date line
                   const now = new Date();
@@ -436,7 +484,7 @@ export function Timeline({
                     <td key={index} className="relative">
                       {/* Separation Date Line (Red) */}
                       {month.monthsLeft === 1 && (
-                        <div className="absolute top-0 right-0 w-px h-screen bg-red-500" style={{ zIndex: 35 }} />
+                        <div className="absolute top-0 right-0 w-px h-screen bg-red-500" style={{ zIndex: 25 }} />
                       )}
                       
                       {/* Current Date Line (Blue) */}
@@ -444,7 +492,7 @@ export function Timeline({
                         <div 
                           className="absolute top-0 w-px h-screen bg-blue-500" 
                           style={{ 
-                            zIndex: 35,
+                            zIndex: 25,
                             left: currentDatePosition
                           }} 
                         />
@@ -462,7 +510,7 @@ export function Timeline({
                 // Base track row that's always visible
                 const trackRow = (
                   <tr key={track} className={`hover:bg-gray-900/50 transition-colors ${trackPadding}`}>
-                    <td className="sticky left-0 z-10 bg-[#1A1B1E] p-2 text-sm font-medium text-gray-300 whitespace-nowrap border-r border-gray-800">
+                    <td className="sticky left-0 z-50 bg-[#1A1B1E] p-2 text-sm font-medium text-gray-300 whitespace-nowrap border-r border-gray-800">
                       <div className={`flex items-center gap-2 px-3 py-1.5 bg-gray-800/90 rounded-md border border-gray-700/50 w-fit ${!isVisible ? 'opacity-50' : ''}`}>
                         {getTrackIcon(track)}
                         <span className="uppercase tracking-wide">{track}</span>
@@ -798,6 +846,6 @@ export function Timeline({
           </div>
         </DialogContent>
       </Dialog>
-    </main>
+    </div>
   );
 } 
