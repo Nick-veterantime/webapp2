@@ -1,9 +1,9 @@
-import { initializeApp, getApp, getApps } from 'firebase/app';
-import { getAuth, GoogleAuthProvider } from 'firebase/auth';
+import { initializeApp, getApp, getApps, FirebaseApp } from 'firebase/app';
+import { getAuth, GoogleAuthProvider, Auth } from 'firebase/auth';
 
-let app;
-let auth;
-let googleProvider;
+let app: FirebaseApp;
+let auth: Auth;
+let googleProvider: GoogleAuthProvider;
 
 async function initializeFirebase() {
   if (!getApps().length) {
@@ -11,17 +11,16 @@ async function initializeFirebase() {
       const response = await fetch('/api/firebase-config');
       const firebaseConfig = await response.json();
       app = initializeApp(firebaseConfig);
-      auth = getAuth(app);
-      googleProvider = new GoogleAuthProvider();
     } catch (error) {
       console.error('Error initializing Firebase:', error);
       throw error;
     }
   } else {
     app = getApp();
-    auth = getAuth(app);
-    googleProvider = new GoogleAuthProvider();
   }
+  
+  auth = getAuth(app);
+  googleProvider = new GoogleAuthProvider();
 }
 
 // Initialize Firebase on the client side
@@ -29,4 +28,4 @@ if (typeof window !== 'undefined') {
   initializeFirebase();
 }
 
-export { auth, googleProvider };
+export { app, auth, googleProvider };

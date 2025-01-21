@@ -43,8 +43,9 @@ export interface UserData {
   location?: string;
   consideringAreas?: State[];
   locationAdditionalInfo?: string;
-  separationDate: string; // Store as ISO string
+  separationDate: string;
   createdAt?: string;
+  updatedAt?: string;
 }
 
 export async function updateUserData(userData: Partial<UserData>) {
@@ -88,8 +89,7 @@ export async function getUserData(): Promise<UserData | null> {
     const userDoc = await getDoc(userRef);
     
     if (userDoc.exists()) {
-      const data = userDoc.data() as UserData;
-      return data;
+      return userDoc.data() as UserData;
     }
     return null;
   } catch (error) {

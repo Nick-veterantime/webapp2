@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { auth, googleProvider } from '@/lib/firebase';
-import { signInWithPopup, createUserWithEmailAndPassword } from 'firebase/auth';
+import React, { useState, useEffect } from 'react';
+import { auth as firebaseAuth, googleProvider } from '@/lib/firebase';
+import { signInWithPopup, createUserWithEmailAndPassword, Auth } from 'firebase/auth';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 
 interface AuthFormProps {
   onComplete: () => void;
@@ -22,7 +23,7 @@ export const AuthForm: React.FC<AuthFormProps> = ({ onComplete }) => {
   const handleEmailSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await createUserWithEmailAndPassword(auth, email, password);
+      await createUserWithEmailAndPassword(firebaseAuth, email, password);
       handleSuccess();
     } catch (err: any) {
       setError(err.message);
@@ -31,7 +32,7 @@ export const AuthForm: React.FC<AuthFormProps> = ({ onComplete }) => {
 
   const handleGoogleSignIn = async () => {
     try {
-      const result = await signInWithPopup(auth, googleProvider);
+      const result = await signInWithPopup(firebaseAuth, googleProvider);
       if (result.user) {
         handleSuccess();
       }
