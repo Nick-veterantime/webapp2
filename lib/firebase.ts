@@ -21,11 +21,14 @@ async function initializeFirebase() {
   
   auth = getAuth(app);
   googleProvider = new GoogleAuthProvider();
+  googleProvider.setCustomParameters({
+    prompt: 'select_account'
+  });
 }
 
 // Initialize Firebase on the client side
 if (typeof window !== 'undefined') {
-  initializeFirebase();
+  initializeFirebase().catch(console.error);
 }
 
-export { app, auth, googleProvider };
+export { app, auth, googleProvider, initializeFirebase };

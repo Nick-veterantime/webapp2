@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { auth, googleProvider } from '@/lib/firebase';
+import { auth, googleProvider, initializeFirebase } from '@/lib/firebase';
 import { signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 
 export function SignIn() {
   const [email, setEmail] = useState('');
@@ -11,19 +12,25 @@ export function SignIn() {
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      await initializeFirebase();
       await signInWithEmailAndPassword(auth, email, password);
       router.push('/timeline');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error signing in:', error);
+      toast.error(error.message || 'Failed to sign in');
     }
   };
 
   const handleGoogleSignIn = async () => {
     try {
-      await signInWithPopup(auth, googleProvider);
-      router.push('/timeline');
-    } catch (error) {
+      await initializeFirebase();
+      const result = await signInWithPopup(auth, googleProvider);
+      if (result.user) {
+        router.push('/timeline');
+      }
+    } catch (error: any) {
       console.error('Error signing in with Google:', error);
+      toast.error(error.message || 'Failed to sign in with Google');
     }
   };
 
