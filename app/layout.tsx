@@ -10,12 +10,13 @@ export const metadata: Metadata = {
   description: "Free military transition planning tool for service members. Create personalized timelines for separation, terminal leave, SkillBridge, VA claims, and job search. Built by veterans for a successful military to civilian transition.",
   icons: {
     icon: [
-      { url: "/favicon.ico" },
+      { url: "/favicon.ico", sizes: "any" },
       { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
       { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
       { url: "/android-chrome-192x192.png", sizes: "192x192", type: "image/png" },
       { url: "/android-chrome-512x512.png", sizes: "512x512", type: "image/png" }
     ],
+    shortcut: [{ url: "/favicon.ico" }],
     apple: [
       { url: "/apple-touch-icon.png" }
     ]
@@ -54,12 +55,6 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark">
-      <head>
-        <link rel="icon" href="/favicon.ico" sizes="any" />
-        <link rel="icon" href="/favicon-16x16.png" type="image/png" sizes="16x16" />
-        <link rel="icon" href="/favicon-32x32.png" type="image/png" sizes="32x32" />
-        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-      </head>
       <body className={inter.className}>
         {children}
         <Toaster richColors position="top-right" />
