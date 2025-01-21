@@ -15,19 +15,24 @@ import { Calendar } from '@/components/ui/calendar';
 import { format, parseISO } from 'date-fns';
 import { states, State } from '@/lib/constants';
 import { TimelineBarData } from './TimelineBar';
+import { ShareTimeline } from './ShareTimeline';
 
 interface NavigationMenuProps {
   userData?: UserData;
   onUpdateUserData?: (newData: UserData) => void;
   timelineBars?: TimelineBarData[];
   onUpdateTimelineBars?: (bars: TimelineBarData[]) => void;
+  separationDate?: Date;
+  showMobileMenu?: boolean;
 }
 
 export function NavigationMenu({ 
   userData: propUserData, 
   onUpdateUserData,
   timelineBars,
-  onUpdateTimelineBars 
+  onUpdateTimelineBars,
+  separationDate,
+  showMobileMenu = false
 }: NavigationMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [showPersonalizationDialog, setShowPersonalizationDialog] = useState(false);
@@ -206,9 +211,43 @@ export function NavigationMenu({
             >
               Personalization Settings
             </button>
+            {showMobileMenu && (
+              <>
+                <div className="md:hidden">
+                  {separationDate && timelineBars && (
+                    <div className="px-4 py-2">
+                      <ShareTimeline 
+                        separationDate={separationDate}
+                        bars={timelineBars}
+                      />
+                    </div>
+                  )}
+                  <div className="px-4 py-2 text-sm text-gray-300 border-t border-gray-800">
+                    Have feedback? Book a chat with founder{' '}
+                    <a 
+                      href="https://www.linkedin.com/in/nicholas-co/" 
+                      className="text-blue-400 hover:text-blue-300"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Nick Co
+                    </a>
+                    {' '}→{' '}
+                    <a 
+                      href="https://cal.com/nickco/feedback"
+                      className="text-blue-400 hover:text-blue-300"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      here
+                    </a>
+                  </div>
+                </div>
+              </>
+            )}
             <button
               onClick={handleSignOut}
-              className="w-full text-left px-4 py-2 text-sm text-white hover:bg-[#2a2a2a] transition-colors"
+              className="w-full text-left px-4 py-2 text-sm text-white hover:bg-[#2a2a2a] transition-colors border-t border-gray-800"
               role="menuitem"
             >
               Sign Out

@@ -382,14 +382,18 @@ const Timeline: React.FC<TimelineProps> = ({
   return (
     <div className="min-h-screen bg-[#121212] flex flex-col">
       {/* Header */}
-      <div className="flex justify-between items-center px-6 py-3 bg-[#1A1B1E] border-b border-gray-800">
+      <div className="flex justify-between items-center px-4 sm:px-6 py-3 bg-[#1A1B1E] border-b border-gray-800">
         {/* Left side - Logo */}
         <div className="flex items-center">
-          <img src="/veteran-timeline-logo.png" alt="Veteran Timeline" className="h-[48px]" />
+          <img 
+            src="/veteran-timeline-logo.png" 
+            alt="Veteran Timeline" 
+            className="h-[36px] sm:h-[48px] w-auto object-contain" 
+          />
         </div>
 
-        {/* Center - Feedback text */}
-        <div className="text-gray-300">
+        {/* Center - Feedback text (hidden on mobile) */}
+        <div className="hidden md:block text-gray-300 mx-8">
           Have feedback? Book a chat with founder{' '}
           <a 
             href="https://www.linkedin.com/in/nicholas-co/" 
@@ -408,20 +412,23 @@ const Timeline: React.FC<TimelineProps> = ({
           >
             here
           </a>
-          {' '}
         </div>
 
-        {/* Right side - Share button and nav */}
-        <div className="flex items-center gap-4">
-          <ShareTimeline 
-            separationDate={separationDate}
-            bars={timelineBars}
-          />
+        {/* Right side - Share button and Navigation */}
+        <div className="flex items-center gap-6">
+          <div className="hidden md:block">
+            <ShareTimeline 
+              separationDate={separationDate}
+              bars={timelineBars}
+            />
+          </div>
           <NavigationMenu 
             userData={userData} 
             onUpdateUserData={onUpdateUserData} 
             timelineBars={timelineBars}
             onUpdateTimelineBars={setTimelineBars}
+            separationDate={separationDate}
+            showMobileMenu={true}
           />
         </div>
       </div>

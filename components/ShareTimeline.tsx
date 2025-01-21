@@ -111,18 +111,36 @@ export function ShareTimeline({ separationDate, bars }: ShareTimelineProps) {
             e.preventDefault();
             setIsOpen(true);
           }}
-          className="h-9 px-4 text-sm font-medium bg-[#4CCEAD]/20 text-[#4CCEAD] hover:bg-[#4CCEAD]/30 rounded-md transition-all duration-200 flex items-center gap-2"
+          className={`h-9 px-4 text-sm font-medium rounded-md transition-all duration-300 flex items-center gap-2.5 ${
+            isCopied 
+              ? 'bg-[#4CCEAD] text-white min-w-[100px]' 
+              : 'bg-[#4CCEAD]/10 text-[#4CCEAD] hover:bg-[#4CCEAD]/20 min-w-[90px]'
+          }`}
         >
           {isCopied ? (
-            <>
-              <Check className="w-4 h-4" />
-              <span>Timeline copied</span>
-            </>
+            <AnimatePresence>
+              <motion.div
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -5 }}
+                className="flex items-center gap-2"
+              >
+                <Check className="w-4 h-4" />
+                <span>Copied</span>
+              </motion.div>
+            </AnimatePresence>
           ) : (
-            <>
-              <Share2 className="w-4 h-4" />
-              <span>Share</span>
-            </>
+            <AnimatePresence>
+              <motion.div
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -5 }}
+                className="flex items-center gap-2"
+              >
+                <Share2 className="w-4 h-4" />
+                <span>Share</span>
+              </motion.div>
+            </AnimatePresence>
           )}
         </button>
       </div>
