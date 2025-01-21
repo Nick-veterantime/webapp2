@@ -444,9 +444,17 @@ const Timeline: React.FC<TimelineProps> = ({
                 </th>
                 {monthsData.map((month, index) => (
                   <th key={index} className="p-2 text-left font-medium tracking-wider border-b border-gray-800 bg-[#1A1B1E] min-w-[180px]">
-                    <div className="text-sm text-gray-400">{month.monthsLeft} months</div>
-                    <div className="text-base text-gray-200 font-semibold whitespace-nowrap pb-3">
-                      {month.label}
+                    <div className="text-sm text-gray-400 md:block hidden">{month.monthsLeft} months</div>
+                    <div className="text-sm text-gray-400 md:hidden">{month.monthsLeft}m</div>
+                    <div className="text-base text-gray-200 font-semibold whitespace-nowrap pb-1">
+                      {month.monthsLeft === 0 ? (
+                        <span className="text-red-400">Post Separation</span>
+                      ) : (
+                        <>
+                          <span className="md:inline hidden">{month.label}</span>
+                          <span className="md:hidden">{format(month.date, 'MMM yyyy')}</span>
+                        </>
+                      )}
                     </div>
                   </th>
                 ))}
@@ -518,8 +526,16 @@ const Timeline: React.FC<TimelineProps> = ({
                   <tr key={`${track}-${trackIndex}`} className={`hover:bg-gray-900/50 transition-colors ${trackPadding}`}>
                     <td className="sticky left-0 z-50 bg-[#1A1B1E] p-2 text-sm font-medium text-gray-300 whitespace-nowrap border-r border-gray-800">
                       <div className={`flex items-center gap-2 px-3 py-1.5 bg-gray-800/90 rounded-md border border-gray-700/50 w-fit ${!isVisible ? 'opacity-50' : ''}`}>
-                        {getTrackIcon(track)}
-                        <span className="uppercase tracking-wide">{track}</span>
+                        <div className="md:flex hidden items-center gap-2">
+                          {getTrackIcon(track)}
+                          <span className="uppercase tracking-wide">{track}</span>
+                        </div>
+                        <div className="md:hidden flex items-center justify-center h-[100px] w-[24px]">
+                          <div className="flex items-center gap-2 -rotate-90 origin-center whitespace-nowrap">
+                            {getTrackIcon(track)}
+                            <span className="uppercase tracking-wide">{track}</span>
+                          </div>
+                        </div>
                       </div>
                     </td>
                     {monthsData.map((month, monthIndex) => (
