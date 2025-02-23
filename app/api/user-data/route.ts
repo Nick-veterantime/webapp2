@@ -13,7 +13,8 @@ export async function GET() {
       {
         cookies: {
           get(name) {
-            return cookieStore.get(name)?.value;
+            const cookie = cookieStore.get(name);
+            return cookie ? cookie.value : undefined;
           },
           set(name, value, options) {
             // No-op for read-only cookie store
@@ -57,7 +58,8 @@ export async function POST(request: Request) {
       {
         cookies: {
           get(name) {
-            return cookieStore.get(name)?.value;
+            const cookie = cookieStore.get(name);
+            return cookie ? cookie.value : undefined;
           },
           set(name, value, options) {
             // No-op for read-only cookie store
