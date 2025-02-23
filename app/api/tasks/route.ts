@@ -55,16 +55,6 @@ export async function GET() {
 
   } catch (error: any) {
     console.error('Error fetching tasks:', error);
-    
-    // Return cached tasks if available, even if expired
-    if (cachedTasks) {
-      console.log('Returning stale cached tasks due to error');
-      return NextResponse.json(cachedTasks);
-    }
-    
-    return NextResponse.json(
-      { error: 'Failed to fetch tasks' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to fetch tasks' }, { status: 500 });
   }
 } 

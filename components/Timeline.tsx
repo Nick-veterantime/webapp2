@@ -19,11 +19,15 @@ import {
   DialogDescription,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { addMonths, format, subMonths } from 'date-fns';
+import { addMonths, format, subMonths, differenceInMonths } from 'date-fns';
 import { TimelineBar, TimelineBarData } from './TimelineBar';
-import { Brain, FileText, Stethoscope, Briefcase, MoreHorizontal, Share2 } from 'lucide-react';
+import { Brain, FileText, Stethoscope, Briefcase, MoreHorizontal, Share2, Lock } from 'lucide-react';
 import { State } from '../lib/constants';
 import { toast } from 'sonner';
+import { PaywallModal } from './PaywallModal';
+import { auth } from '@/lib/supabase';
+import { useRouter } from 'next/navigation';
+import { TaskModal } from './TaskModal';
 
 interface Task {
   id: string;
@@ -164,20 +168,22 @@ interface TimelineProps {
   separationDate?: Date;
   userData?: UserData;
   onUpdateUserData?: (newData: UserData) => void;
+  isPremium?: boolean;
 }
 
 const Timeline: React.FC<TimelineProps> = ({ 
   visibleTracks, 
   separationDate: propSeparationDate,
   userData,
-  onUpdateUserData 
+  onUpdateUserData,
+  isPremium = false
 }) => {
   const [tasks, setTasks] = useState<Task[]>(defaultTasks);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastFetchTime, setLastFetchTime] = useState<number | null>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [separationDate, setSeparationDate] = useState<Date>(propSeparationDate || new Date());
   const [timelineBars, setTimelineBars] = useState<TimelineBarData[]>([]);
   const [currentDate] = useState(new Date());
@@ -190,6 +196,8 @@ const Timeline: React.FC<TimelineProps> = ({
   const [selectedDate, setSelectedDate] = useState<Date>(
     userData?.separationDate ? new Date(userData.separationDate) : new Date()
   );
+  const [showPaywallModal, setShowPaywallModal] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     let mounted = true;
@@ -318,7 +326,7 @@ const Timeline: React.FC<TimelineProps> = ({
   const getMonthsData = () => {
     const months = [];
     
-    // Add all months from monthsList
+    // Show all months without premium restrictions
     for (const monthsLeft of monthsList) {
       const date = subMonths(separationDate, monthsLeft);
       months.push({
@@ -426,6 +434,64 @@ const Timeline: React.FC<TimelineProps> = ({
     }
   };
 
+  const handleTaskClick = (task: Task) => {
+    setSelectedTask(task);
+    setIsTaskModalOpen(true);
+  };
+
+  const handleLinkClick = (e: React.MouseEvent, task: Task) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (!isPremium) {
+      setShowPaywallModal(true);
+      return;
+    }
+    
+    if (task.link) {
+      window.open(task.link, '_blank');
+    }
+  };
+
+  const handleSubscribe = async () => {
+    try {
+      const { data: { session } } = await auth.getSession();
+      
+      if (!session) {
+        toast.error('Please sign in to subscribe');
+        router.push('/');
+        return;
+      }
+
+      toast.loading('Preparing subscription...', { id: 'subscription' });
+
+      const response = await fetch('/api/subscribe', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const data = await response.json();
+      
+      if (data.error) {
+        toast.error('Failed to start subscription process', { id: 'subscription' });
+        return;
+      }
+
+      if (!data.url) {
+        toast.error('Invalid response from subscription service', { id: 'subscription' });
+        return;
+      }
+
+      toast.success('Redirecting to checkout...', { id: 'subscription' });
+      window.location.href = data.url;
+    } catch (error) {
+      console.error('Error initiating subscription:', error);
+      toast.error('Failed to start subscription process', { id: 'subscription' });
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-[calc(100vh-200px)] text-gray-200">
@@ -509,9 +575,13 @@ const Timeline: React.FC<TimelineProps> = ({
                     {/* Track header cell */}
                   </th>
                   {monthsData.map((month, index) => (
-                    <th key={index} className="p-2 text-left font-medium tracking-wider border-b border-gray-800 bg-[#1A1B1E] min-w-[180px]">
-                      <div className="text-sm text-gray-400 md:block hidden">{month.monthsLeft} months</div>
-                      <div className="text-sm text-gray-400 md:hidden">{month.monthsLeft}m</div>
+                    <th 
+                      key={index} 
+                      className="p-2 text-left font-medium tracking-wider border-b border-gray-800 bg-[#1A1B1E] min-w-[180px]"
+                    >
+                      <div className="text-sm text-gray-400 md:block hidden">
+                        {month.monthsLeft} months
+                      </div>
                       <div className="text-base text-gray-200 font-semibold whitespace-nowrap pb-1">
                         {month.monthsLeft === 0 ? (
                           <span className="text-red-400">Post Separation</span>
@@ -560,7 +630,7 @@ const Timeline: React.FC<TimelineProps> = ({
                   const isFirstTrack = trackIndex === 0;
                   const trackPadding = isFirstTrack ? "pt-4" : "";
 
-                  const renderTrackRow = () => (
+                  const trackRow = (
                     <tr key={`${track}-${trackIndex}`} className={`hover:bg-gray-900/50 transition-colors ${trackPadding}`}>
                       <td className="sticky left-0 z-40 bg-[#1A1B1E] p-2 text-sm font-medium text-gray-300 whitespace-nowrap border-r border-gray-800">
                         <div className={`flex items-center gap-2 px-3 py-1.5 bg-gray-800/90 rounded-md border border-gray-700/50 w-fit ${!isVisible ? 'opacity-50' : ''}`}>
@@ -579,52 +649,22 @@ const Timeline: React.FC<TimelineProps> = ({
                       {monthsData.map((month, monthIndex) => (
                         <td 
                           key={`${track}-${month.monthsLeft}-${monthIndex}`} 
-                          className={`relative min-w-[180px] max-w-[180px] ${!isVisible ? 'opacity-50' : ''}`}
+                          className={`relative min-w-[180px] max-w-[180px] ${
+                            !isVisible ? 'opacity-50' : ''
+                          }`}
                         >
                           {isVisible && (
                             <div className="p-2 space-y-1">
                               {getTasksForTrackAndMonth(track, month.monthsLeft).map(task => (
-                                <div key={`${task.id}-${month.monthsLeft}`}>
-                                  <Dialog 
-                                    key={`dialog-${task.id}`}
-                                    open={isDialogOpen && selectedTask?.id === task.id}
-                                    onOpenChange={(open) => {
-                                      setIsDialogOpen(open);
-                                      if (!open) setSelectedTask(null);
-                                    }}
-                                  >
-                                    <DialogTrigger asChild>
-                                      <button className="w-full text-left" onClick={() => {
-                                        setSelectedTask(task);
-                                        setIsDialogOpen(true);
-                                      }}>
-                                        <div className="p-2 rounded-lg bg-gray-800/50 hover:bg-gray-800 transition-colors cursor-pointer border border-gray-700/50">
-                                          <p className="text-sm text-gray-200 line-clamp-2 leading-relaxed">{task.task}</p>
-                                        </div>
-                                      </button>
-                                    </DialogTrigger>
-                                    <DialogContent className="bg-[#1A1B1E] text-gray-200 border-gray-700">
-                                      <DialogHeader>
-                                        <DialogTitle className="text-xl font-semibold text-gray-200">{task.task}</DialogTitle>
-                                        <DialogDescription asChild>
-                                          <div className="mt-4 space-y-4">
-                                            <p className="text-gray-300">{task.description}</p>
-                                            {task.link && (
-                                              <a 
-                                                href={task.link} 
-                                                target="_blank" 
-                                                rel="noopener noreferrer"
-                                                className="inline-flex items-center text-blue-400 hover:text-blue-300 transition-colors"
-                                              >
-                                                {task.linkedText || 'Learn More'} →
-                                              </a>
-                                            )}
-                                          </div>
-                                        </DialogDescription>
-                                      </DialogHeader>
-                                    </DialogContent>
-                                  </Dialog>
-                                </div>
+                                <button 
+                                  key={`${task.id}-${month.monthsLeft}`}
+                                  className="w-full text-left"
+                                  onClick={() => handleTaskClick(task)}
+                                >
+                                  <div className="p-2 rounded-lg bg-gray-800/50 hover:bg-gray-800 transition-colors cursor-pointer border border-gray-700/50">
+                                    <p className="text-sm text-gray-200 line-clamp-2 leading-relaxed">{task.task}</p>
+                                  </div>
+                                </button>
                               ))}
                             </div>
                           )}
@@ -657,7 +697,7 @@ const Timeline: React.FC<TimelineProps> = ({
                             </div>
                           </td>
                         </tr>
-                        {renderTrackRow()}
+                        {trackRow}
                       </React.Fragment>
                     );
                   }
@@ -685,7 +725,7 @@ const Timeline: React.FC<TimelineProps> = ({
                             </div>
                           </td>
                         </tr>
-                        {renderTrackRow()}
+                        {trackRow}
                       </React.Fragment>
                     );
                   }
@@ -713,12 +753,12 @@ const Timeline: React.FC<TimelineProps> = ({
                             </div>
                           </td>
                         </tr>
-                        {renderTrackRow()}
+                        {trackRow}
                       </React.Fragment>
                     );
                   }
 
-                  return renderTrackRow();
+                  return trackRow;
                 })}
               </tbody>
             </table>
@@ -903,6 +943,17 @@ const Timeline: React.FC<TimelineProps> = ({
           </div>
         </DialogContent>
       </Dialog>
+
+      <TaskModal
+        task={selectedTask}
+        isOpen={isTaskModalOpen}
+        onClose={() => {
+          setIsTaskModalOpen(false);
+          setSelectedTask(null);
+        }}
+        onSubscribe={handleSubscribe}
+        isPremium={isPremium}
+      />
     </div>
   );
 };

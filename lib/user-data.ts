@@ -14,6 +14,7 @@ export interface UserData {
   careerGoal: string;
   educationLevel?: string;
   separationDate: string;
+  is_premium?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -54,6 +55,7 @@ export async function updateUserData(userData: UserData, options: UpdateOptions 
           career_goal: userData.careerGoal,
           education_level: userData.educationLevel,
           separation_date: userData.separationDate,
+          is_premium: userData.is_premium,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
@@ -76,6 +78,7 @@ export async function updateUserData(userData: UserData, options: UpdateOptions 
           career_goal: userData.careerGoal,
           education_level: userData.educationLevel,
           separation_date: userData.separationDate,
+          is_premium: userData.is_premium,
           updated_at: new Date().toISOString()
         })
         .eq('user_id', session.user.id)
@@ -124,6 +127,7 @@ export async function getUserData(): Promise<UserData | null> {
       careerGoal: data.career_goal || '',
       educationLevel: data.education_level,
       separationDate: data.separation_date,
+      is_premium: data.is_premium || false,
       createdAt: data.created_at,
       updatedAt: data.updated_at
     };

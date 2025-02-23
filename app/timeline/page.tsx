@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { getUserData, updateUserData, UserData } from '@/lib/user-data';
 import { auth } from '@/lib/supabase';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 
 // Dynamically import Timeline with no SSR
@@ -23,6 +23,25 @@ export default function TimelinePage() {
   const [error, setError] = useState<string | null>(null);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isSuccess = searchParams.get('success') === 'true';
+  const isCanceled = searchParams.get('canceled') === 'true';
+
+  useEffect(() => {
+    if (isSuccess) {
+      toast.success('Thank you for subscribing!', {
+        description: 'You now have access to the full 60-month timeline.',
+      });
+      // Remove the query parameter using router
+      router.replace('/timeline');
+    } else if (isCanceled) {
+      toast.error('Subscription canceled', {
+        description: 'Your subscription was not completed.',
+      });
+      // Remove the query parameter using router
+      router.replace('/timeline');
+    }
+  }, [isSuccess, isCanceled, router]);
 
   useEffect(() => {
     let mounted = true;
@@ -184,6 +203,7 @@ export default function TimelinePage() {
         separationDate={userData?.separationDate ? new Date(userData.separationDate) : new Date(new Date().setFullYear(new Date().getFullYear() + 1))}
         userData={userData}
         onUpdateUserData={handleUpdateUserData}
+        isPremium={userData?.is_premium || false}
       />
     </div>
   );
