@@ -14,12 +14,10 @@ export async function middleware(request: NextRequest) {
           return request.cookies.get(name)?.value;
         },
         set(name, value, options) {
-          request.cookies.set(name, value);
-          response.cookies.set(name, value, options);
+          // No-op for read-only cookie store
         },
         remove(name) {
-          request.cookies.delete(name);
-          response.cookies.delete(name);
+          // No-op for read-only cookie store
         },
       },
     }
