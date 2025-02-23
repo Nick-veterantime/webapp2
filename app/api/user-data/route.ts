@@ -6,20 +6,19 @@ export const runtime = 'edge';
 
 export async function GET() {
   try {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
-          get(name) {
-            const cookie = cookieStore.get(name);
-            return cookie ? cookie.value : undefined;
+          get(name: string) {
+            return cookieStore.get(name)?.value;
           },
-          set(name, value, options) {
+          set(name: string, value: string, options: any) {
             // No-op for read-only cookie store
           },
-          remove(name) {
+          remove(name: string, options: any) {
             // No-op for read-only cookie store
           },
         },
@@ -51,20 +50,19 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
-          get(name) {
-            const cookie = cookieStore.get(name);
-            return cookie ? cookie.value : undefined;
+          get(name: string) {
+            return cookieStore.get(name)?.value;
           },
-          set(name, value, options) {
+          set(name: string, value: string, options: any) {
             // No-op for read-only cookie store
           },
-          remove(name) {
+          remove(name: string, options: any) {
             // No-op for read-only cookie store
           },
         },
