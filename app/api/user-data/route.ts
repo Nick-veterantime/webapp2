@@ -4,7 +4,9 @@ import { NextResponse } from 'next/server';
 
 export async function GET() {
   try {
-    const cookieStore = await cookies();
+    const cookieStore = cookies();
+    let response = NextResponse.next();
+
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -14,10 +16,20 @@ export async function GET() {
             return cookieStore.get(name)?.value;
           },
           set(name, value, options) {
-            // No-op for read-only cookie store
+            response = NextResponse.next();
+            response.cookies.set({
+              name,
+              value,
+              ...options,
+            });
           },
-          remove(name) {
-            // No-op for read-only cookie store
+          remove(name, options) {
+            response = NextResponse.next();
+            response.cookies.set({
+              name,
+              value: '',
+              ...options,
+            });
           },
         },
       }
@@ -39,7 +51,12 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json(data);
+    const jsonResponse = NextResponse.json(data);
+    response.cookies.getAll().forEach(cookie => {
+      jsonResponse.cookies.set(cookie);
+    });
+
+    return jsonResponse;
   } catch (error) {
     console.error('Error in GET /api/user-data:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -48,7 +65,9 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const cookieStore = await cookies();
+    const cookieStore = cookies();
+    let response = NextResponse.next();
+
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -58,10 +77,20 @@ export async function POST(request: Request) {
             return cookieStore.get(name)?.value;
           },
           set(name, value, options) {
-            // No-op for read-only cookie store
+            response = NextResponse.next();
+            response.cookies.set({
+              name,
+              value,
+              ...options,
+            });
           },
-          remove(name) {
-            // No-op for read-only cookie store
+          remove(name, options) {
+            response = NextResponse.next();
+            response.cookies.set({
+              name,
+              value: '',
+              ...options,
+            });
           },
         },
       }
@@ -117,7 +146,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: result.error.message }, { status: 500 });
     }
 
-    return NextResponse.json(result.data);
+    const jsonResponse = NextResponse.json(result.data);
+    response.cookies.getAll().forEach(cookie => {
+      jsonResponse.cookies.set(cookie);
+    });
+
+    return jsonResponse;
   } catch (error) {
     console.error('Error in POST /api/user-data:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
