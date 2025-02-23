@@ -5,19 +5,22 @@ import { NextResponse } from 'next/server';
 export async function GET() {
   try {
     const cookieStore = cookies();
+    const response = NextResponse.next();
+
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
           get(name) {
-            return cookieStore.get(name)?.value;
+            const cookie = cookieStore.get(name);
+            return cookie?.value;
           },
           set(name, value, options) {
-            cookieStore.set(name, value, options);
+            cookieStore.set(name, value);
           },
-          remove(name, options) {
-            cookieStore.set(name, '', { ...options, maxAge: 0 });
+          remove(name) {
+            cookieStore.delete(name);
           },
         },
       }
@@ -49,19 +52,22 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const cookieStore = cookies();
+    const response = NextResponse.next();
+
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
           get(name) {
-            return cookieStore.get(name)?.value;
+            const cookie = cookieStore.get(name);
+            return cookie?.value;
           },
           set(name, value, options) {
-            cookieStore.set(name, value, options);
+            cookieStore.set(name, value);
           },
-          remove(name, options) {
-            cookieStore.set(name, '', { ...options, maxAge: 0 });
+          remove(name) {
+            cookieStore.delete(name);
           },
         },
       }
