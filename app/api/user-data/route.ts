@@ -4,23 +4,20 @@ import { NextResponse } from 'next/server';
 
 export async function GET() {
   try {
-    const cookieStore = cookies();
-    const response = NextResponse.next();
-
+    const cookieStore = await cookies();
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
           get(name) {
-            const cookie = cookieStore.get(name);
-            return cookie?.value;
+            return cookieStore.get(name)?.value;
           },
           set(name, value, options) {
-            cookieStore.set(name, value);
+            // No-op for read-only cookie store
           },
           remove(name) {
-            cookieStore.delete(name);
+            // No-op for read-only cookie store
           },
         },
       }
@@ -51,23 +48,20 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const cookieStore = cookies();
-    const response = NextResponse.next();
-
+    const cookieStore = await cookies();
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
           get(name) {
-            const cookie = cookieStore.get(name);
-            return cookie?.value;
+            return cookieStore.get(name)?.value;
           },
           set(name, value, options) {
-            cookieStore.set(name, value);
+            // No-op for read-only cookie store
           },
           remove(name) {
-            cookieStore.delete(name);
+            // No-op for read-only cookie store
           },
         },
       }
