@@ -11,7 +11,7 @@ import { LifeGoalsSelector } from '@/components/LifeGoalsSelector';
 import { SpecialtySelector } from '@/components/SpecialtySelector';
 import { SignIn } from '@/components/SignIn';
 import { useRouter } from 'next/navigation';
-import { updateUserData } from '@/lib/firebase-user';
+import { updateUserData } from '@/lib/user-data';
 import { toast } from 'sonner';
 import { LocationSelector } from '@/components/LocationSelector';
 import { State, states } from '@/lib/constants';
@@ -73,6 +73,16 @@ export default function Home() {
   const [lifeGoal, setLifeGoal] = useState<string>('');
   const [educationLevel, setEducationLevel] = useState<string>('');
   const [showSignIn, setShowSignIn] = useState(false);
+  const [userData, setUserData] = useState<UserData>({
+    branch: '',
+    rankCategory: '',
+    rank: '',
+    jobCode: '',
+    locationPreference: 'not sure yet',
+    location: '',
+    careerGoal: '',
+    separationDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString()
+  });
   const [locationData, setLocationData] = useState<{
     preference: string;
     locationType?: 'CONUS' | 'OCONUS';
@@ -134,23 +144,42 @@ export default function Home() {
     };
   };
 
-  const handleBranchSelect = async (branch: string) => {
+  const handleBranchSelect = (branch: string) => {
     setSelectedBranch(branch);
+    setUserData(prev => ({
+      ...prev,
+      branch,
+    }));
     setCurrentStep(3);
   };
 
   const handleDateSelect = (date: Date) => {
     setSeparationDate(date);
+    setUserData(prev => ({
+      ...prev,
+      separationDate: date.toISOString(),
+    }));
     setCurrentStep(4);
   };
 
   const handlePaygradeSelect = (selectedPaygrade: string) => {
     setPaygrade(selectedPaygrade);
+    setUserData(prev => ({
+      ...prev,
+      rank: selectedPaygrade,
+      rankCategory: selectedPaygrade.startsWith('E') ? 'Enlisted' : 
+                   selectedPaygrade.startsWith('W') ? 'Warrant Officer' : 
+                   selectedPaygrade.startsWith('O') ? 'Officer' : '',
+    }));
     setCurrentStep(5);
   };
 
   const handleSpecialtySelect = (selectedSpecialty: string) => {
     setSpecialty(selectedSpecialty);
+    setUserData(prev => ({
+      ...prev,
+      jobCode: selectedSpecialty,
+    }));
     setCurrentStep(6);
   };
 
@@ -162,6 +191,14 @@ export default function Home() {
     additionalInfo?: string;
   }) => {
     setLocationData(data);
+    setUserData(prev => ({
+      ...prev,
+      locationPreference: data.preference,
+      locationType: data.locationType,
+      location: data.location || '',
+      consideringAreas: data.consideringAreas,
+      locationAdditionalInfo: data.additionalInfo,
+    }));
     setCurrentStep(7);
   };
 
@@ -170,13 +207,19 @@ export default function Home() {
     if (selectedEducationLevel) {
       setEducationLevel(selectedEducationLevel);
     }
+    setUserData(prev => ({
+      ...prev,
+      careerGoal: selectedGoal,
+      educationLevel: selectedEducationLevel,
+    }));
     setCurrentStep(8);
   };
 
   const handleAuthComplete = async () => {
     try {
-      // Save all the user's onboarding data
-      await updateUserData({
+      // Save all user data after successful authentication
+      const finalData = {
+        ...userData,
         branch: selectedBranch || '',
         rankCategory: paygrade.startsWith('E') ? 'Enlisted' : 
                      paygrade.startsWith('W') ? 'Warrant Officer' : 
@@ -185,13 +228,14 @@ export default function Home() {
         jobCode: specialty,
         locationPreference: locationData?.preference || 'not sure yet',
         locationType: locationData?.locationType,
-        location: locationData?.location,
+        location: locationData?.location || '',
         consideringAreas: locationData?.consideringAreas,
         locationAdditionalInfo: locationData?.additionalInfo,
         careerGoal: lifeGoal,
         educationLevel: educationLevel || undefined,
         separationDate: separationDate.toISOString(),
-      });
+      };
+      await updateUserData(finalData);
       
       router.push('/timeline');
     } catch (error) {
@@ -231,8 +275,8 @@ export default function Home() {
   return (
     <main className="min-h-screen relative overflow-hidden">
       {/* Background Timeline */}
-      <div className="absolute inset-0 hidden sm:block">
-        <div className={`transition-opacity duration-500 ${currentStep > 1 ? 'opacity-20 pointer-events-none' : 'opacity-40'}`}>
+      <div className="absolute inset-0 -z-10 hidden sm:block">
+        <div className={`transition-opacity duration-500 ${currentStep > 1 ? 'opacity-20' : 'opacity-40'}`}>
           <DynamicTimeline 
             visibleTracks={currentStep > 1 ? getOnboardingTimelineData().visibleTracks : defaultTimelineData.visibleTracks}
             separationDate={currentStep > 1 ? getOnboardingTimelineData().separationDate : defaultTimelineData.separationDate}
@@ -242,7 +286,7 @@ export default function Home() {
       </div>
 
       {/* Content */}
-      <div className="relative z-10">
+      <div className="relative z-20">
         {currentStep === 1 ? (
           <div className="flex flex-col items-center justify-center min-h-screen p-4 sm:p-6 text-white">
             <div className="w-full max-w-5xl">
@@ -703,7 +747,25 @@ export default function Home() {
                     <p className="text-center text-gray-300 mb-6">
                       Your personalized timeline is just moments away.
                     </p>
-                    <AuthForm onComplete={handleAuthComplete} />
+                    <AuthForm 
+                      onComplete={handleAuthComplete} 
+                      userData={{
+                        branch: selectedBranch || '',
+                        rankCategory: paygrade.startsWith('E') ? 'Enlisted' : 
+                                     paygrade.startsWith('W') ? 'Warrant Officer' : 
+                                     paygrade.startsWith('O') ? 'Officer' : '',
+                        rank: paygrade,
+                        jobCode: specialty,
+                        locationPreference: locationData?.preference || '',
+                        locationType: locationData?.locationType,
+                        location: locationData?.location,
+                        consideringAreas: locationData?.consideringAreas,
+                        locationAdditionalInfo: locationData?.additionalInfo,
+                        careerGoal: lifeGoal,
+                        educationLevel: educationLevel,
+                        separationDate: separationDate.toISOString(),
+                      }}
+                    />
                   </div>
                 )}
               </div>

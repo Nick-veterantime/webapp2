@@ -1,55 +1,34 @@
 import { useState } from 'react';
-import { auth, googleProvider, initializeFirebase } from '@/lib/firebase';
-import { signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
+import { auth } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
 export function SignIn() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsLoading(true);
     try {
-      await initializeFirebase();
-      await signInWithEmailAndPassword(auth, email, password);
+      const { error } = await auth.signInWithPassword({
+        email,
+        password
+      });
+      
+      if (error) throw error;
       router.push('/timeline');
     } catch (error: any) {
       console.error('Error signing in:', error);
-      if (error.code === 'auth/invalid-credential') {
+      if (error.message === 'Invalid login credentials') {
         toast.error('Invalid email or password');
       } else {
         toast.error('Failed to sign in. Please try again.');
       }
-    }
-  };
-
-  const handleGoogleSignIn = async () => {
-    try {
-      await initializeFirebase();
-      const result = await signInWithPopup(auth, googleProvider);
-      if (result.user) {
-        router.push('/timeline');
-      }
-    } catch (error: any) {
-      console.error('Error signing in with Google:', error);
-      
-      // Handle specific error cases
-      switch (error.code) {
-        case 'auth/popup-closed-by-user':
-        case 'auth/cancelled-popup-request':
-          // User closed the popup, no need to show error
-          break;
-        case 'auth/unauthorized-domain':
-          toast.error('This domain is not authorized for sign-in. Please try again later.');
-          break;
-        case 'auth/popup-blocked':
-          toast.error('Pop-up was blocked by your browser. Please allow pop-ups and try again.');
-          break;
-        default:
-          toast.error('Failed to sign in with Google. Please try again.');
-      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -68,6 +47,7 @@ export function SignIn() {
             className="w-full p-3 rounded bg-[#2a2a2a] border border-gray-700"
             placeholder="you@example.com"
             required
+            disabled={isLoading}
           />
         </div>
         
@@ -80,28 +60,18 @@ export function SignIn() {
             className="w-full p-3 rounded bg-[#2a2a2a] border border-gray-700"
             placeholder="Enter your password"
             required
+            disabled={isLoading}
           />
         </div>
 
         <button
           type="submit"
-          className="w-full bg-blue-600 text-white py-3 rounded font-medium hover:bg-blue-700 transition-colors"
+          className="w-full bg-blue-600 text-white py-3 rounded font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled={isLoading}
         >
-          Sign In
+          {isLoading ? 'Signing in...' : 'Sign In'}
         </button>
       </form>
-
-      <div className="mt-6 text-center text-sm text-gray-500">
-        <span>or continue with</span>
-      </div>
-
-      <button
-        onClick={handleGoogleSignIn}
-        className="mt-4 w-full flex items-center justify-center gap-2 bg-white text-black py-3 rounded font-medium hover:bg-gray-100 transition-colors"
-      >
-        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5" />
-        Sign in with Google
-      </button>
     </div>
   );
 } 

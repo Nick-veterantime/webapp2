@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { HamburgerMenuIcon } from '@radix-ui/react-icons';
 import {
   DropdownMenu,
@@ -23,6 +23,7 @@ import { addMonths, format, subMonths } from 'date-fns';
 import { TimelineBar, TimelineBarData } from './TimelineBar';
 import { Brain, FileText, Stethoscope, Briefcase, MoreHorizontal, Share2 } from 'lucide-react';
 import { State } from '../lib/constants';
+import { toast } from 'sonner';
 
 interface Task {
   id: string;
@@ -86,6 +87,39 @@ const defaultBars: TimelineBarData[] = [
   }
 ];
 
+const defaultTasks: Task[] = [
+  {
+    id: 'default-1',
+    task: 'Begin Benefits Delivery at Discharge (BDD)',
+    month: '6',
+    track: 'Admin',
+    branch: 'All',
+    linkedText: 'Learn more about BDD',
+    link: 'https://www.va.gov/disability/how-to-file-claim/when-to-file/pre-discharge-claim/',
+    description: 'Start your VA disability claim process'
+  },
+  {
+    id: 'default-2',
+    task: 'Schedule TAP Workshop',
+    month: '12',
+    track: 'Admin',
+    branch: 'All',
+    linkedText: 'TAP Information',
+    link: 'https://www.tapevents.org/courses',
+    description: 'Mandatory transition workshop'
+  },
+  {
+    id: 'default-3',
+    task: 'Begin Job Search',
+    month: '12',
+    track: 'Job',
+    branch: 'All',
+    linkedText: 'Job Search Resources',
+    link: 'https://www.dol.gov/agencies/vets',
+    description: 'Start looking for post-service employment'
+  }
+];
+
 const getTrackIcon = (track: string) => {
   switch (track) {
     case 'Mindset':
@@ -138,17 +172,63 @@ const Timeline: React.FC<TimelineProps> = ({
   userData,
   onUpdateUserData 
 }) => {
-  const [tasks, setTasks] = useState<Task[]>([]);
+  const [tasks, setTasks] = useState<Task[]>(defaultTasks);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [lastFetchTime, setLastFetchTime] = useState<number | null>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [separationDate, setSeparationDate] = useState<Date>(propSeparationDate || new Date());
   const [timelineBars, setTimelineBars] = useState<TimelineBarData[]>([]);
+  const [currentDate] = useState(new Date());
   const [isEditingBars, setIsEditingBars] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showPersonalizationDialog, setShowPersonalizationDialog] = useState(false);
   const [editingUserData, setEditingUserData] = useState<UserData | undefined>(userData);
+  const [hasUserMadeChanges, setHasUserMadeChanges] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date>(
+    userData?.separationDate ? new Date(userData.separationDate) : new Date()
+  );
+
+  useEffect(() => {
+    let mounted = true;
+    const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+    const fetchTasks = async () => {
+      try {
+        // Check if we should fetch based on cache duration
+        const now = Date.now();
+        if (lastFetchTime && (now - lastFetchTime) < CACHE_DURATION) {
+          return;
+        }
+
+        const response = await fetch('/api/tasks');
+        if (!response.ok) {
+          throw new Error('Failed to fetch tasks');
+        }
+        const data = await response.json();
+        
+        if (mounted) {
+          setTasks(data.length > 0 ? data : defaultTasks);
+          setLastFetchTime(now);
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error('Error fetching tasks:', err);
+        if (mounted) {
+          setError('Failed to fetch tasks. Using default timeline.');
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchTasks();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     setTimelineBars(defaultBars);
@@ -157,21 +237,22 @@ const Timeline: React.FC<TimelineProps> = ({
   useEffect(() => {
     if (propSeparationDate) {
       setSeparationDate(propSeparationDate);
+      setSelectedDate(propSeparationDate);
       
-      // Reset timeline bars with default values when separation date changes
-      setTimelineBars(defaultBars.map(bar => {
-        // Keep existing bar state if it exists
-        const existingBar = timelineBars.find(existing => existing.id === bar.id);
-        if (existingBar) {
-          return {
-            ...bar,
-            hidden: existingBar.hidden,
-            startDays: existingBar.startDays,
-            endDays: existingBar.endDays
-          };
-        }
-        return bar;
-      }));
+      setTimelineBars(prevBars => {
+        return defaultBars.map(bar => {
+          const existingBar = prevBars.find(existing => existing.id === bar.id);
+          if (existingBar) {
+            return {
+              ...bar,
+              hidden: existingBar.hidden,
+              startDays: existingBar.startDays,
+              endDays: existingBar.endDays
+            };
+          }
+          return bar;
+        });
+      });
     }
   }, [propSeparationDate]);
 
@@ -179,6 +260,7 @@ const Timeline: React.FC<TimelineProps> = ({
     if (userData?.separationDate) {
       const newDate = new Date(userData.separationDate);
       setSeparationDate(newDate);
+      setSelectedDate(newDate);
       
       // Reset timeline bars with default values when separation date changes
       setTimelineBars(defaultBars.map(bar => {
@@ -201,11 +283,36 @@ const Timeline: React.FC<TimelineProps> = ({
     setEditingUserData(userData);
   }, [userData]);
 
-  const updateEditingUserData = (field: keyof UserData, value: string) => {
+  const updateEditingUserData = (field: keyof UserData, value: any) => {
+    setHasUserMadeChanges(true);
     setEditingUserData(prev => prev ? {
       ...prev,
       [field]: value
     } : undefined);
+  };
+
+  const handleSaveChanges = async () => {
+    if (!editingUserData || !hasUserMadeChanges) return;
+
+    setIsSaving(true);
+    try {
+      // Ensure we have the latest separation date
+      const updatedUserData = {
+        ...editingUserData,
+        separationDate: selectedDate.toISOString()
+      };
+
+      // Update parent components
+      onUpdateUserData?.(updatedUserData);
+      
+      setShowPersonalizationDialog(false);
+      setHasUserMadeChanges(false);
+    } catch (error) {
+      console.error('Error saving user data:', error);
+      toast.error('Failed to save settings');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const getMonthsData = () => {
@@ -231,61 +338,19 @@ const Timeline: React.FC<TimelineProps> = ({
     return months;
   };
 
-  const fetchTasks = async () => {
-    try {
-      const res = await fetch('/api/tasks');
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.details || 'Failed to fetch tasks');
-      }
-      const data = await res.json();
-      if (!Array.isArray(data)) {
-        throw new Error('Invalid response format');
-      }
-      
-      // Only update if data has changed
-      const hasDataChanged = JSON.stringify(data) !== JSON.stringify(tasks);
-      if (hasDataChanged) {
-        setTasks(data);
-      }
-      
-      setError(null);
-    } catch (err) {
-      console.error('Error fetching tasks:', err);
-      setError(err instanceof Error ? err.message : 'An error occurred while fetching tasks');
+  const calculateDatePosition = useCallback((monthDate: Date, nextMonthDate: Date | undefined) => {
+    if (!nextMonthDate || monthDate > currentDate || nextMonthDate <= currentDate) {
+      return null;
     }
-  };
 
-  // Initial fetch
-  useEffect(() => {
-    const loadInitialData = async () => {
-      setLoading(true);
-      await fetchTasks();
-      setLoading(false);
-    };
-    loadInitialData();
-  }, []);
-
-  // Set up polling for updates every 10 seconds
-  useEffect(() => {
-    let isSubscribed = true;
-
-    const poll = async () => {
-      if (isSubscribed) {
-        await fetchTasks();
-      }
-    };
-
-    const pollInterval = setInterval(poll, 10000);
-
-    // Initial poll
-    poll();
-
-    return () => {
-      isSubscribed = false;
-      clearInterval(pollInterval);
-    };
-  }, []); // Remove tasks dependency to avoid infinite polling loop
+    const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+    const monthEnd = new Date(nextMonthDate.getFullYear(), nextMonthDate.getMonth(), 1);
+    const totalMillisInMonth = monthEnd.getTime() - monthStart.getTime();
+    const elapsedMillis = currentDate.getTime() - monthStart.getTime();
+    const percentage = (elapsedMillis / totalMillisInMonth) * 100;
+    
+    return `${Math.max(0, Math.min(100, percentage))}%`;
+  }, [currentDate]);
 
   const getTasksForTrackAndMonth = (track: string, monthsLeft: number) => {
     if (!Array.isArray(tasks)) return [];
@@ -415,7 +480,7 @@ const Timeline: React.FC<TimelineProps> = ({
         </div>
 
         {/* Right side - Share button and Navigation */}
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-6 relative z-[60]">
           <div className="hidden md:block">
             <ShareTimeline 
               separationDate={separationDate}
@@ -434,256 +499,230 @@ const Timeline: React.FC<TimelineProps> = ({
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 overflow-auto">
-        <div className="min-w-[1200px]">
-          <table className="w-full border-collapse">
-            <thead className="sticky top-0 z-40">
-              <tr className="bg-[#1A1B1E]">
-                <th className="sticky left-0 z-40 bg-[#1A1B1E] p-2 text-left text-sm font-medium text-gray-400 uppercase tracking-wider border-b border-gray-800 w-[200px]">
-                  {/* Track header cell */}
-                </th>
-                {monthsData.map((month, index) => (
-                  <th key={index} className="p-2 text-left font-medium tracking-wider border-b border-gray-800 bg-[#1A1B1E] min-w-[180px]">
-                    <div className="text-sm text-gray-400 md:block hidden">{month.monthsLeft} months</div>
-                    <div className="text-sm text-gray-400 md:hidden">{month.monthsLeft}m</div>
-                    <div className="text-base text-gray-200 font-semibold whitespace-nowrap pb-1">
-                      {month.monthsLeft === 0 ? (
-                        <span className="text-red-400">Post Separation</span>
-                      ) : (
-                        <>
-                          <span className="md:inline hidden">{month.label}</span>
-                          <span className="md:hidden">{format(month.date, 'MMM yyyy')}</span>
-                        </>
-                      )}
-                    </div>
+      <div className="flex-1 relative">
+        <div className="absolute inset-0 overflow-y-auto">
+          <div className="min-w-[1200px] h-full overflow-x-scroll scrollbar-visible">
+            <table className="w-full border-collapse">
+              <thead className="sticky top-0 z-50">
+                <tr className="bg-[#1A1B1E]">
+                  <th className="sticky left-0 z-50 bg-[#1A1B1E] p-2 text-left text-sm font-medium text-gray-400 uppercase tracking-wider border-b border-gray-800 w-[200px]">
+                    {/* Track header cell */}
                   </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="relative divide-y divide-gray-800">
-              {/* Vertical Lines Container */}
-              <tr className="sticky top-[6.5rem] z-20 pointer-events-none">
-                <td className="sticky left-0 z-50 bg-[#1A1B1E]"></td>
-                {monthsData.map((month, index) => {
-                  // Calculate proportional position for current date line
-                  const now = new Date();
-                  const nextMonth = monthsData[index + 1]?.date;
-                  let currentDatePosition = null;
-                  
-                  // Check if current date falls within this month cell
-                  if (month.date <= now && nextMonth && nextMonth > now) {
-                    // Get the start of the current month and next month
-                    const monthStart = new Date(month.date.getFullYear(), month.date.getMonth(), 1);
-                    const monthEnd = new Date(nextMonth.getFullYear(), nextMonth.getMonth(), 1);
-                    
-                    // Calculate the total milliseconds in the month
-                    const totalMillisInMonth = monthEnd.getTime() - monthStart.getTime();
-                    
-                    // Calculate milliseconds elapsed since start of month
-                    const elapsedMillis = now.getTime() - monthStart.getTime();
-                    
-                    // Calculate the percentage through the month
-                    const percentage = (elapsedMillis / totalMillisInMonth) * 100;
-                    
-                    // Ensure the percentage is between 0 and 100
-                    currentDatePosition = `${Math.max(0, Math.min(100, percentage))}%`;
-                    
-                    console.log('Month:', month.label);
-                    console.log('Percentage:', percentage);
-                    console.log('Start:', monthStart);
-                    console.log('End:', monthEnd);
-                    console.log('Now:', now);
-                  }
+                  {monthsData.map((month, index) => (
+                    <th key={index} className="p-2 text-left font-medium tracking-wider border-b border-gray-800 bg-[#1A1B1E] min-w-[180px]">
+                      <div className="text-sm text-gray-400 md:block hidden">{month.monthsLeft} months</div>
+                      <div className="text-sm text-gray-400 md:hidden">{month.monthsLeft}m</div>
+                      <div className="text-base text-gray-200 font-semibold whitespace-nowrap pb-1">
+                        {month.monthsLeft === 0 ? (
+                          <span className="text-red-400">Post Separation</span>
+                        ) : (
+                          <>
+                            <span className="md:inline hidden">{month.label}</span>
+                            <span className="md:hidden">{format(month.date, 'MMM yyyy')}</span>
+                          </>
+                        )}
+                      </div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="relative divide-y divide-gray-800">
+                {/* Vertical Lines Container */}
+                <tr className="sticky top-[6.5rem] z-20 pointer-events-none">
+                  <td className="sticky left-0 z-50 bg-[#1A1B1E]"></td>
+                  {monthsData.map((month, index) => {
+                    const currentDatePosition = calculateDatePosition(month.date, monthsData[index + 1]?.date);
 
-                  return (
-                    <td key={index} className="relative">
-                      {/* Separation Date Line (Red) */}
-                      {month.monthsLeft === 1 && (
-                        <div className="absolute top-0 right-0 w-px h-screen bg-red-500" style={{ zIndex: 25 }} />
-                      )}
-                      
-                      {/* Current Date Line (Blue) */}
-                      {currentDatePosition !== null && (
-                        <div 
-                          className="absolute top-0 w-px h-screen bg-blue-500" 
-                          style={{ 
-                            zIndex: 25,
-                            left: currentDatePosition
-                          }} 
-                        />
-                      )}
-                    </td>
-                  );
-                })}
-              </tr>
+                    return (
+                      <td key={index} className="relative">
+                        {/* Separation Date Line (Red) */}
+                        {month.monthsLeft === 1 && (
+                          <div className="absolute top-0 right-0 w-px h-screen bg-red-500" style={{ zIndex: 25 }} />
+                        )}
+                        
+                        {/* Current Date Line (Blue) */}
+                        {currentDatePosition !== null && (
+                          <div 
+                            className="absolute top-0 w-px h-screen bg-blue-500" 
+                            style={{ 
+                              zIndex: 25,
+                              left: currentDatePosition
+                            }} 
+                          />
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
 
-              {tracks.map((track, trackIndex) => {
-                const isVisible = isTrackVisible(track);
-                const isFirstTrack = trackIndex === 0;
-                const trackPadding = isFirstTrack ? "pt-4" : "";
+                {tracks.map((track, trackIndex) => {
+                  const isVisible = isTrackVisible(track);
+                  const isFirstTrack = trackIndex === 0;
+                  const trackPadding = isFirstTrack ? "pt-4" : "";
 
-                const renderTrackRow = () => (
-                  <tr key={`${track}-${trackIndex}`} className={`hover:bg-gray-900/50 transition-colors ${trackPadding}`}>
-                    <td className="sticky left-0 z-50 bg-[#1A1B1E] p-2 text-sm font-medium text-gray-300 whitespace-nowrap border-r border-gray-800">
-                      <div className={`flex items-center gap-2 px-3 py-1.5 bg-gray-800/90 rounded-md border border-gray-700/50 w-fit ${!isVisible ? 'opacity-50' : ''}`}>
-                        <div className="md:flex hidden items-center gap-2">
-                          {getTrackIcon(track)}
-                          <span className="uppercase tracking-wide">{track}</span>
-                        </div>
-                        <div className="md:hidden flex items-center justify-center h-[100px] w-[24px]">
-                          <div className="flex items-center gap-2 -rotate-90 origin-center whitespace-nowrap">
+                  const renderTrackRow = () => (
+                    <tr key={`${track}-${trackIndex}`} className={`hover:bg-gray-900/50 transition-colors ${trackPadding}`}>
+                      <td className="sticky left-0 z-40 bg-[#1A1B1E] p-2 text-sm font-medium text-gray-300 whitespace-nowrap border-r border-gray-800">
+                        <div className={`flex items-center gap-2 px-3 py-1.5 bg-gray-800/90 rounded-md border border-gray-700/50 w-fit ${!isVisible ? 'opacity-50' : ''}`}>
+                          <div className="md:flex hidden items-center gap-2">
                             {getTrackIcon(track)}
                             <span className="uppercase tracking-wide">{track}</span>
                           </div>
+                          <div className="md:hidden flex items-center justify-center h-[100px] w-[24px]">
+                            <div className="flex items-center gap-2 -rotate-90 origin-center whitespace-nowrap">
+                              {getTrackIcon(track)}
+                              <span className="uppercase tracking-wide">{track}</span>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                    {monthsData.map((month, monthIndex) => (
-                      <td 
-                        key={`${track}-${month.monthsLeft}-${monthIndex}`} 
-                        className={`relative min-w-[180px] max-w-[180px] ${!isVisible ? 'opacity-50' : ''}`}
-                      >
-                        {isVisible && (
-                          <div className="p-2 space-y-1">
-                            {getTasksForTrackAndMonth(track, month.monthsLeft).map(task => (
-                              <div key={`${task.id}-${month.monthsLeft}`}>
-                                <Dialog 
-                                  key={`dialog-${task.id}`}
-                                  open={isDialogOpen && selectedTask?.id === task.id}
-                                  onOpenChange={(open) => {
-                                    setIsDialogOpen(open);
-                                    if (!open) setSelectedTask(null);
-                                  }}
-                                >
-                                  <DialogTrigger asChild>
-                                    <button className="w-full text-left" onClick={() => {
-                                      setSelectedTask(task);
-                                      setIsDialogOpen(true);
-                                    }}>
-                                      <div className="p-2 rounded-lg bg-gray-800/50 hover:bg-gray-800 transition-colors cursor-pointer border border-gray-700/50">
-                                        <p className="text-sm text-gray-200 line-clamp-2 leading-relaxed">{task.task}</p>
-                                      </div>
-                                    </button>
-                                  </DialogTrigger>
-                                  <DialogContent className="bg-[#1A1B1E] text-gray-200 border-gray-700">
-                                    <DialogHeader>
-                                      <DialogTitle className="text-xl font-semibold text-gray-200">{task.task}</DialogTitle>
-                                      <DialogDescription asChild>
-                                        <div className="mt-4 space-y-4">
-                                          <p className="text-gray-300">{task.description}</p>
-                                          {task.link && (
-                                            <a 
-                                              href={task.link} 
-                                              target="_blank" 
-                                              rel="noopener noreferrer"
-                                              className="inline-flex items-center text-blue-400 hover:text-blue-300 transition-colors"
-                                            >
-                                              {task.linkedText || 'Learn More'} →
-                                            </a>
-                                          )}
-                                        </div>
-                                      </DialogDescription>
-                                    </DialogHeader>
-                                  </DialogContent>
-                                </Dialog>
-                              </div>
-                            ))}
-                          </div>
-                        )}
                       </td>
-                    ))}
-                  </tr>
-                );
-
-                // Special handling for tracks with bars
-                if (track === 'Admin' && isVisible) {
-                  return (
-                    <React.Fragment key={`${track}-container`}>
-                      <tr key="terminal-leave-timeline" className="hover:bg-gray-900/50 transition-colors">
-                        <td className="sticky left-0 z-10 bg-[#1A1B1E] border-r border-gray-800"></td>
-                        <td colSpan={monthsData.length} className="relative p-0 h-8">
-                          <div className="timeline-container absolute inset-0">
-                            {timelineBars
-                              .filter(bar => bar.id === 'terminal' && !bar.hidden)
-                              .map(bar => (
-                                <TimelineBar
-                                  key={`${bar.id}-${bar.row}`}
-                                  bar={{...bar, row: 0}}
-                                  separationDate={separationDate}
-                                  onUpdate={handleBarUpdate}
-                                  onDelete={handleBarDelete}
-                                  isEditing={isEditingBars}
-                                  allBars={timelineBars.filter(b => b.id === 'terminal')}
-                                />
+                      {monthsData.map((month, monthIndex) => (
+                        <td 
+                          key={`${track}-${month.monthsLeft}-${monthIndex}`} 
+                          className={`relative min-w-[180px] max-w-[180px] ${!isVisible ? 'opacity-50' : ''}`}
+                        >
+                          {isVisible && (
+                            <div className="p-2 space-y-1">
+                              {getTasksForTrackAndMonth(track, month.monthsLeft).map(task => (
+                                <div key={`${task.id}-${month.monthsLeft}`}>
+                                  <Dialog 
+                                    key={`dialog-${task.id}`}
+                                    open={isDialogOpen && selectedTask?.id === task.id}
+                                    onOpenChange={(open) => {
+                                      setIsDialogOpen(open);
+                                      if (!open) setSelectedTask(null);
+                                    }}
+                                  >
+                                    <DialogTrigger asChild>
+                                      <button className="w-full text-left" onClick={() => {
+                                        setSelectedTask(task);
+                                        setIsDialogOpen(true);
+                                      }}>
+                                        <div className="p-2 rounded-lg bg-gray-800/50 hover:bg-gray-800 transition-colors cursor-pointer border border-gray-700/50">
+                                          <p className="text-sm text-gray-200 line-clamp-2 leading-relaxed">{task.task}</p>
+                                        </div>
+                                      </button>
+                                    </DialogTrigger>
+                                    <DialogContent className="bg-[#1A1B1E] text-gray-200 border-gray-700">
+                                      <DialogHeader>
+                                        <DialogTitle className="text-xl font-semibold text-gray-200">{task.task}</DialogTitle>
+                                        <DialogDescription asChild>
+                                          <div className="mt-4 space-y-4">
+                                            <p className="text-gray-300">{task.description}</p>
+                                            {task.link && (
+                                              <a 
+                                                href={task.link} 
+                                                target="_blank" 
+                                                rel="noopener noreferrer"
+                                                className="inline-flex items-center text-blue-400 hover:text-blue-300 transition-colors"
+                                              >
+                                                {task.linkedText || 'Learn More'} →
+                                              </a>
+                                            )}
+                                          </div>
+                                        </DialogDescription>
+                                      </DialogHeader>
+                                    </DialogContent>
+                                  </Dialog>
+                                </div>
                               ))}
-                          </div>
+                            </div>
+                          )}
                         </td>
-                      </tr>
-                      {renderTrackRow()}
-                    </React.Fragment>
+                      ))}
+                    </tr>
                   );
-                }
 
-                if (track === 'Job' && isVisible) {
-                  return (
-                    <React.Fragment key={`${track}-container`}>
-                      <tr key="job-timeline-bars" className="hover:bg-gray-900/50 transition-colors">
-                        <td className="sticky left-0 z-10 bg-[#1A1B1E] border-r border-gray-800"></td>
-                        <td colSpan={monthsData.length} className="relative p-0 h-16">
-                          <div className="timeline-container absolute inset-0">
-                            {timelineBars
-                              .filter(bar => (bar.id === 'work' || bar.id === 'skillbridge') && !bar.hidden)
-                              .map(bar => (
-                                <TimelineBar
-                                  key={`${bar.id}-${bar.row}`}
-                                  bar={{...bar, row: bar.id === 'work' ? 0 : 1}}
-                                  separationDate={separationDate}
-                                  onUpdate={handleBarUpdate}
-                                  onDelete={handleBarDelete}
-                                  isEditing={isEditingBars}
-                                  allBars={timelineBars.filter(b => b.id === 'work' || b.id === 'skillbridge')}
-                                />
-                              ))}
-                          </div>
-                        </td>
-                      </tr>
-                      {renderTrackRow()}
-                    </React.Fragment>
-                  );
-                }
+                  // Special handling for tracks with bars
+                  if (track === 'Admin' && isVisible) {
+                    return (
+                      <React.Fragment key={`${track}-container`}>
+                        <tr key="terminal-leave-timeline" className="hover:bg-gray-900/50 transition-colors">
+                          <td className="sticky left-0 z-40 bg-[#1A1B1E] border-r border-gray-800"></td>
+                          <td colSpan={monthsData.length} className="relative p-0 h-8">
+                            <div className="timeline-container absolute inset-0">
+                              {timelineBars
+                                .filter(bar => bar.id === 'terminal' && !bar.hidden)
+                                .map(bar => (
+                                  <TimelineBar
+                                    key={`${bar.id}-${bar.row}`}
+                                    bar={{...bar, row: 0}}
+                                    separationDate={separationDate}
+                                    onUpdate={handleBarUpdate}
+                                    onDelete={handleBarDelete}
+                                    isEditing={isEditingBars}
+                                    allBars={timelineBars.filter(b => b.id === 'terminal')}
+                                  />
+                                ))}
+                            </div>
+                          </td>
+                        </tr>
+                        {renderTrackRow()}
+                      </React.Fragment>
+                    );
+                  }
 
-                if (track === 'Health' && isVisible) {
-                  return (
-                    <React.Fragment key={`${track}-container`}>
-                      <tr key="health-timeline-bars" className="hover:bg-gray-900/50 transition-colors">
-                        <td className="sticky left-0 z-10 bg-[#1A1B1E] border-r border-gray-800"></td>
-                        <td colSpan={monthsData.length} className="relative p-0 h-8">
-                          <div className="timeline-container absolute inset-0">
-                            {timelineBars
-                              .filter(bar => (bar.id === 'bdd' || bar.id === 'disability') && !bar.hidden)
-                              .map(bar => (
-                                <TimelineBar
-                                  key={`${bar.id}-${bar.row}`}
-                                  bar={{...bar, row: bar.id === 'bdd' ? 0 : 0}}
-                                  separationDate={separationDate}
-                                  onUpdate={handleBarUpdate}
-                                  onDelete={handleBarDelete}
-                                  isEditing={isEditingBars}
-                                  allBars={timelineBars.filter(b => b.id === 'bdd' || b.id === 'disability')}
-                                />
-                              ))}
-                          </div>
-                        </td>
-                      </tr>
-                      {renderTrackRow()}
-                    </React.Fragment>
-                  );
-                }
+                  if (track === 'Job' && isVisible) {
+                    return (
+                      <React.Fragment key={`${track}-container`}>
+                        <tr key="job-timeline-bars" className="hover:bg-gray-900/50 transition-colors">
+                          <td className="sticky left-0 z-40 bg-[#1A1B1E] border-r border-gray-800"></td>
+                          <td colSpan={monthsData.length} className="relative p-0 h-16">
+                            <div className="timeline-container absolute inset-0">
+                              {timelineBars
+                                .filter(bar => (bar.id === 'work' || bar.id === 'skillbridge') && !bar.hidden)
+                                .map(bar => (
+                                  <TimelineBar
+                                    key={`${bar.id}-${bar.row}`}
+                                    bar={{...bar, row: bar.id === 'work' ? 0 : 1}}
+                                    separationDate={separationDate}
+                                    onUpdate={handleBarUpdate}
+                                    onDelete={handleBarDelete}
+                                    isEditing={isEditingBars}
+                                    allBars={timelineBars.filter(b => b.id === 'work' || b.id === 'skillbridge')}
+                                  />
+                                ))}
+                            </div>
+                          </td>
+                        </tr>
+                        {renderTrackRow()}
+                      </React.Fragment>
+                    );
+                  }
 
-                return renderTrackRow();
-              })}
-            </tbody>
-          </table>
+                  if (track === 'Health' && isVisible) {
+                    return (
+                      <React.Fragment key={`${track}-container`}>
+                        <tr key="health-timeline-bars" className="hover:bg-gray-900/50 transition-colors">
+                          <td className="sticky left-0 z-40 bg-[#1A1B1E] border-r border-gray-800"></td>
+                          <td colSpan={monthsData.length} className="relative p-0 h-8">
+                            <div className="timeline-container absolute inset-0">
+                              {timelineBars
+                                .filter(bar => (bar.id === 'bdd' || bar.id === 'disability') && !bar.hidden)
+                                .map(bar => (
+                                  <TimelineBar
+                                    key={`${bar.id}-${bar.row}`}
+                                    bar={{...bar, row: bar.id === 'bdd' ? 0 : 0}}
+                                    separationDate={separationDate}
+                                    onUpdate={handleBarUpdate}
+                                    onDelete={handleBarDelete}
+                                    isEditing={isEditingBars}
+                                    allBars={timelineBars.filter(b => b.id === 'bdd' || b.id === 'disability')}
+                                  />
+                                ))}
+                            </div>
+                          </td>
+                        </tr>
+                        {renderTrackRow()}
+                      </React.Fragment>
+                    );
+                  }
+
+                  return renderTrackRow();
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -855,12 +894,7 @@ const Timeline: React.FC<TimelineProps> = ({
                 Cancel
               </button>
               <button
-                onClick={() => {
-                  if (onUpdateUserData && editingUserData) {
-                    onUpdateUserData(editingUserData);
-                  }
-                  setShowPersonalizationDialog(false);
-                }}
+                onClick={handleSaveChanges}
                 className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-500 transition-colors"
               >
                 Save Changes

@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { auth } from '@/lib/firebase';
-import { signOut } from 'firebase/auth';
+import { auth } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import {
   Dialog,
@@ -9,7 +8,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
-import { getUserData, updateUserData, UserData } from '@/lib/firebase-user';
+import { getUserData, updateUserData, UserData } from '@/lib/user-data';
 import { toast } from 'sonner';
 import { Calendar } from '@/components/ui/calendar';
 import { format, parseISO } from 'date-fns';
@@ -49,19 +48,20 @@ export function NavigationMenu({
   useEffect(() => {
     const fetchUserData = async () => {
       try {
-        const data = await getUserData();
-        if (data) {
-          setEditingUserData(data);
-          onUpdateUserData?.(data);
+        const { data: { user } } = await auth.getUser();
+        if (user) {
+          const data = await getUserData();
+          if (data) {
+            setEditingUserData(data);
+            onUpdateUserData?.(data);
+          }
         }
       } catch (error) {
         console.error('Error fetching user data:', error);
       }
     };
 
-    if (auth.currentUser) {
-      fetchUserData();
-    }
+    fetchUserData();
   }, [onUpdateUserData]);
 
   // Update local state when prop changes
@@ -81,10 +81,12 @@ export function NavigationMenu({
 
   const handleSignOut = async () => {
     try {
-      await signOut(auth);
+      const { error } = await auth.signOut();
+      if (error) throw error;
       router.push('/');
     } catch (error) {
       console.error('Error signing out:', error);
+      toast.error('Failed to sign out');
     }
   };
 
@@ -189,16 +191,17 @@ export function NavigationMenu({
 
       {/* Menu Dropdown */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-[#1a1a1a] ring-1 ring-black ring-opacity-5 z-50">
+        <div className="absolute right-0 mt-2 w-48 rounded-lg shadow-lg bg-gradient-to-b from-[#1E1E1E] to-[#141414] ring-1 ring-white/10 border border-white/5 backdrop-blur-sm z-[60]">
           <div className="py-1" role="menu" aria-orientation="vertical">
             <button
               onClick={() => {
                 setShowTimelineBarsDialog(true);
                 setIsOpen(false);
               }}
-              className="w-full text-left px-4 py-2 text-sm text-white hover:bg-[#2a2a2a] transition-colors"
+              className="w-full text-left px-4 py-2.5 text-sm text-gray-200 hover:bg-white/5 transition-colors flex items-center gap-2 group"
               role="menuitem"
             >
+              <span className="w-1 h-1 rounded-full bg-gray-500 group-hover:bg-blue-400 transition-colors"></span>
               Edit Timeline Bars
             </button>
             <button
@@ -206,23 +209,24 @@ export function NavigationMenu({
                 setShowPersonalizationDialog(true);
                 setIsOpen(false);
               }}
-              className="w-full text-left px-4 py-2 text-sm text-white hover:bg-[#2a2a2a] transition-colors"
+              className="w-full text-left px-4 py-2.5 text-sm text-gray-200 hover:bg-white/5 transition-colors flex items-center gap-2 group"
               role="menuitem"
             >
+              <span className="w-1 h-1 rounded-full bg-gray-500 group-hover:bg-blue-400 transition-colors"></span>
               Personalization Settings
             </button>
             {showMobileMenu && (
               <>
                 <div className="md:hidden">
                   {separationDate && timelineBars && (
-                    <div className="px-4 py-2">
+                    <div className="px-4 py-2.5 border-t border-white/5">
                       <ShareTimeline 
                         separationDate={separationDate}
                         bars={timelineBars}
                       />
                     </div>
                   )}
-                  <div className="px-4 py-2 text-sm text-gray-300 border-t border-gray-800">
+                  <div className="px-4 py-2.5 text-sm text-gray-400 border-t border-white/5">
                     Have feedback? Book a chat with founder{' '}
                     <a 
                       href="https://www.linkedin.com/in/nicholas-co/" 
@@ -247,9 +251,10 @@ export function NavigationMenu({
             )}
             <button
               onClick={handleSignOut}
-              className="w-full text-left px-4 py-2 text-sm text-white hover:bg-[#2a2a2a] transition-colors border-t border-gray-800"
+              className="w-full text-left px-4 py-2.5 text-sm text-gray-200 hover:bg-white/5 transition-colors flex items-center gap-2 group border-t border-white/5"
               role="menuitem"
             >
+              <span className="w-1 h-1 rounded-full bg-gray-500 group-hover:bg-red-400 transition-colors"></span>
               Sign Out
             </button>
           </div>

@@ -1,58 +1,141 @@
-import React, { useState, useEffect } from 'react';
-import { auth as firebaseAuth, googleProvider } from '@/lib/firebase';
-import { signInWithPopup, createUserWithEmailAndPassword, Auth } from 'firebase/auth';
-import Image from 'next/image';
+import React, { useState } from 'react';
+import { auth } from '@/lib/supabase';
+import { updateUserData } from '@/lib/user-data';
+import { State } from '@/lib/constants';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
 interface AuthFormProps {
   onComplete: () => void;
+  userData: {
+    branch: string;
+    rankCategory: string;
+    rank: string;
+    jobCode: string;
+    locationPreference: string;
+    locationType?: 'CONUS' | 'OCONUS';
+    location?: string;
+    consideringAreas?: State[];
+    locationAdditionalInfo?: string;
+    careerGoal: string;
+    educationLevel?: string;
+    separationDate: string;
+  };
 }
 
-export const AuthForm: React.FC<AuthFormProps> = ({ onComplete }) => {
+export const AuthForm: React.FC<AuthFormProps> = ({ onComplete, userData }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
-
-  const handleSuccess = () => {
-    onComplete();
-    router.push('/timeline');
-  };
 
   const handleEmailSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsLoading(true);
+
     try {
-      await createUserWithEmailAndPassword(firebaseAuth, email, password);
-      handleSuccess();
-    } catch (err: any) {
-      setError(err.message);
+      const { data, error } = await auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/timeline`,
+          data: {
+            email: email,
+          }
+        }
+      });
+      
+      if (error) {
+        if (error.message.includes('39 seconds')) {
+          toast.error('Please wait a moment and try again');
+          return;
+        }
+        throw error;
+      }
+
+      if (data.session) {
+        await handleSuccess(data.session);
+        
+        if (!data.user?.email_confirmed_at) {
+          toast.success('Please verify your email when you get a chance', {
+            duration: 6000,
+          });
+        }
+      } else if (data.user) {
+        // If we have a user but no session, try to sign in
+        const { data: signInData, error: signInError } = await auth.signInWithPassword({
+          email,
+          password
+        });
+        
+        if (signInError) throw signInError;
+        
+        if (signInData.session) {
+          await handleSuccess(signInData.session);
+        }
+      }
+    } catch (error: any) {
+      console.error('Sign up error:', error);
+      if (error.message.includes('User already registered')) {
+        // If user exists, try to sign in instead
+        try {
+          const { data: signInData, error: signInError } = await auth.signInWithPassword({
+            email,
+            password
+          });
+          
+          if (signInError) {
+            toast.error('Invalid email or password. Please try again.');
+          } else if (signInData.session) {
+            await handleSuccess(signInData.session);
+          }
+        } catch (signInError: any) {
+          toast.error('Invalid email or password. Please try again.');
+        }
+      } else {
+        toast.error(error.message);
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleGoogleSignIn = async () => {
+  const handleSuccess = async (session: any) => {
     try {
-      const result = await signInWithPopup(firebaseAuth, googleProvider);
-      if (result.user) {
-        handleSuccess();
+      if (!session) {
+        throw new Error('No session available');
       }
+
+      // Save the user data to Supabase
+      await updateUserData({
+        ...userData,
+        branch: userData.branch,
+        rankCategory: userData.rankCategory,
+        rank: userData.rank,
+        jobCode: userData.jobCode,
+        locationPreference: userData.locationPreference,
+        locationType: userData.locationType,
+        location: userData.location,
+        consideringAreas: userData.consideringAreas,
+        locationAdditionalInfo: userData.locationAdditionalInfo,
+        careerGoal: userData.careerGoal,
+        educationLevel: userData.educationLevel,
+        separationDate: userData.separationDate
+      });
+      
+      onComplete();
+      router.push('/timeline');
     } catch (error) {
-      setError('Failed to sign in with Google. Please try again.');
-      console.error('Google sign-in error:', error);
+      console.error('Error saving user data:', error);
+      toast.error('Failed to save your preferences');
     }
   };
 
   return (
     <div className="space-y-6">
-      {error && (
-        <div className="bg-red-500/20 border border-red-500 text-red-100 p-3 rounded">
-          {error}
-        </div>
-      )}
-
-      <form onSubmit={handleEmailSignUp} className="space-y-6">
-        <div>
-          <label htmlFor="email" className="block text-sm font-medium text-gray-300">
+      <form onSubmit={handleEmailSignUp}>
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-300">
             Email Address
           </label>
           <input
@@ -63,11 +146,12 @@ export const AuthForm: React.FC<AuthFormProps> = ({ onComplete }) => {
             placeholder="you@example.com"
             className="mt-1 w-full bg-gray-800/80 border border-gray-700 rounded-lg p-3 text-white focus:ring-2 focus:ring-blue-500"
             required
+            disabled={isLoading}
           />
         </div>
 
-        <div>
-          <label htmlFor="password" className="block text-sm font-medium text-gray-300">
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-300">
             Create Password
           </label>
           <input
@@ -78,39 +162,18 @@ export const AuthForm: React.FC<AuthFormProps> = ({ onComplete }) => {
             placeholder="At least 6 characters"
             className="mt-1 w-full bg-gray-800/80 border border-gray-700 rounded-lg p-3 text-white focus:ring-2 focus:ring-blue-500"
             required
+            disabled={isLoading}
           />
         </div>
 
         <button
           type="submit"
-          className="w-full bg-blue-600 text-white rounded-lg p-3 font-medium hover:bg-blue-700 transition-colors"
+          className="w-full bg-blue-600 text-white rounded-lg p-3 font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled={isLoading}
         >
-          Create Account
+          {isLoading ? 'Creating Account...' : 'Create Account'}
         </button>
       </form>
-
-      <div className="relative">
-        <div className="absolute inset-0 flex items-center">
-          <div className="w-full border-t border-gray-700"></div>
-        </div>
-        <div className="relative flex justify-center text-sm">
-          <span className="px-2 bg-navy-900 text-gray-400">or continue with</span>
-        </div>
-      </div>
-
-      <button
-        onClick={handleGoogleSignIn}
-        className="w-full flex items-center justify-center gap-3 bg-white text-gray-900 rounded-lg p-3 font-medium hover:bg-gray-100 transition-colors"
-      >
-        <Image
-          src="/images/google-logo.svg"
-          alt="Google"
-          width={20}
-          height={20}
-          className="w-5 h-5"
-        />
-        Sign in with Google
-      </button>
     </div>
   );
 };
