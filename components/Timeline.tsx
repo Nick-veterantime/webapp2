@@ -276,29 +276,50 @@ const Timeline: React.FC<TimelineProps> = ({
   
   const initiateSubscriptionProcess = async () => {
     try {
+      interface UserInfo {
+        userAgent: string;
+        timestamp: string;
+        source: string;
+        anonymous: boolean;
+        email?: string;
+        userId?: string;
+        [key: string]: any; // Allow additional properties
+      }
+      
+      let userInfo: UserInfo = {
+        // Capture browser info for better tracking
+        userAgent: navigator.userAgent,
+        timestamp: new Date().toISOString(),
+        source: 'timeline_component',
+        anonymous: true
+      };
+      
+      // Try to get authentication but proceed even if it fails
       try {
         console.log('Attempting to refresh session before subscription...');
         await auth.refreshSession();
         console.log('Session refreshed successfully');
       } catch (refreshError) {
-        console.warn('Session refresh failed, will try with current session:', refreshError);
+        console.warn('Session refresh failed, will proceed with limited data:', refreshError);
       }
       
+      // Get session info if available
       const { data: { session }, error: sessionError } = await auth.getSession();
-      
-      const userData = {
-        email: session?.user?.email,
-        userId: session?.user?.id
-      };
       
       if (sessionError) {
         console.warn('Session error but proceeding anyway:', sessionError);
       }
       
       if (!session) {
-        console.warn('No active session found, proceeding with limited user data');
+        console.warn('No active session found, proceeding with anonymous checkout');
       } else {
         console.log('Session found, proceeding with user data');
+        userInfo = {
+          ...userInfo,
+          email: session?.user?.email,
+          userId: session?.user?.id,
+          anonymous: false
+        };
       }
       
       const headers: Record<string, string> = {
@@ -313,29 +334,37 @@ const Timeline: React.FC<TimelineProps> = ({
       const response = await fetch('/api/subscribe', {
         method: 'POST',
         headers,
-        body: JSON.stringify(userData)
+        body: JSON.stringify(userInfo)
       });
       
       // Log response status for debugging
       console.log(`API response status: ${response.status}`);
       
+      // Handle both successful and error responses
+      const data = await response.json();
+      
       if (!response.ok) {
-        let errorMessage = `Error: ${response.status}`;
-        let errorData;
-        try {
-          errorData = await response.json();
-          console.error('Subscription API error details:', response.status, errorData);
-          errorMessage = errorData.error || errorMessage;
-        } catch (e) {
-          console.error('Could not parse error response:', e);
+        console.error('Subscription request failed with status:', response.status, 'Response:', data);
+        
+        // Special handling for auth errors - offer to sign in
+        if (response.status === 401 && data.error?.includes('authentication')) {
+          console.log('Authentication error detected, offering sign-in option');
+          
+          toast.error(`Authentication required. Please sign in first.`, {
+            id: 'subscription',
+            action: {
+              label: 'Sign In',
+              onClick: () => router.push('/login')
+            },
+          });
+          
+          return;
         }
         
-        console.error('Subscription request failed with status:', response.status, 'Message:', errorMessage);
-        throw new Error(errorMessage);
+        throw new Error(data.error || `Error ${response.status}`);
       }
       
       console.log('Subscription API request succeeded');
-      const data = await response.json();
       
       if (!data) {
         console.error('Empty response data received from API');

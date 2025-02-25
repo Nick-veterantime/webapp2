@@ -116,24 +116,28 @@ export async function POST(request: Request) {
     console.log('Getting session...');
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
     
+    // Extract any user data from request body in case session fails
+    let userData: any = {};
+    try {
+      const requestData = await request.json();
+      userData = requestData || {};
+      console.log('Request body data available:', Object.keys(userData).join(', '));
+    } catch (bodyError) {
+      console.error('Error parsing request body:', bodyError);
+    }
+
+    // Log session status
     if (sessionError) {
-      console.error('Error getting session:', sessionError);
-      return NextResponse.json({ 
-        error: `Authentication error: ${sessionError.message}` 
-      }, { status: 401 });
+      console.warn('Session error, but proceeding with anonymous checkout:', sessionError.message);
     }
-    
+
     if (!session) {
-      console.error('No active session found');
-      return NextResponse.json({ error: 'Not authenticated. Please sign in again.' }, { status: 401 });
-    }
-
-    console.log('Session found, user ID:', session.user?.id?.substring(0, 8));
-
-    // Extra verification that user ID exists
-    if (!session.user || !session.user.id) {
-      console.error('Invalid user data in session');
-      return NextResponse.json({ error: 'Invalid user session' }, { status: 401 });
+      console.warn('No active session found, proceeding with anonymous checkout');
+    } else {
+      console.log('Session found, user ID:', session.user?.id?.substring(0, 8));
+      // Add session user data to the userData object for tracking
+      userData.sessionUserId = session.user?.id;
+      userData.sessionUserEmail = session.user?.email;
     }
 
     // Create a Stripe Checkout Session
@@ -150,7 +154,11 @@ export async function POST(request: Request) {
       const priceId = process.env.STRIPE_PRICE_ID || 'price_1QvmylADchHZkH6DD15DQuNk';
       console.log('Using price ID (prefix only):', priceId.substring(0, 10) + '...');
       
-      const checkoutSession = await stripe.checkout.sessions.create({
+      // Get customer email from session or request body
+      const customerEmail = session?.user?.email || userData.email || undefined;
+      
+      // Create checkout session configuration
+      const checkoutConfig: any = {
         payment_method_types: ['card'],
         line_items: [
           {
@@ -161,13 +169,26 @@ export async function POST(request: Request) {
         mode: 'subscription',
         success_url: successUrl,
         cancel_url: cancelUrl,
-        customer_email: session.user.email,
         metadata: {
-          userId: session.user.id,
-          email: session.user.email || 'not_provided',
+          source: 'veteran_timeline_app',
           timestamp: new Date().toISOString()
-        },
-      });
+        }
+      };
+      
+      // Add customer email only if we have it
+      if (customerEmail) {
+        checkoutConfig.customer_email = customerEmail;
+        checkoutConfig.metadata.email = customerEmail;
+      }
+      
+      // Add user ID to metadata if available
+      if (session?.user?.id) {
+        checkoutConfig.metadata.userId = session.user.id;
+      } else if (userData.userId) {
+        checkoutConfig.metadata.requestUserId = userData.userId;
+      }
+      
+      const checkoutSession = await stripe.checkout.sessions.create(checkoutConfig);
 
       if (!checkoutSession.url) {
         console.error('Checkout session created but URL is missing');
