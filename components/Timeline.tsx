@@ -316,33 +316,69 @@ const Timeline: React.FC<TimelineProps> = ({
         body: JSON.stringify(userData)
       });
       
+      // Log response status for debugging
+      console.log(`API response status: ${response.status}`);
+      
       if (!response.ok) {
         let errorMessage = `Error: ${response.status}`;
+        let errorData;
         try {
-          const errorData = await response.json();
-          console.error('Subscription API error:', response.status, errorData);
+          errorData = await response.json();
+          console.error('Subscription API error details:', response.status, errorData);
           errorMessage = errorData.error || errorMessage;
         } catch (e) {
           console.error('Could not parse error response:', e);
         }
         
+        console.error('Subscription request failed with status:', response.status, 'Message:', errorMessage);
         throw new Error(errorMessage);
       }
       
+      console.log('Subscription API request succeeded');
       const data = await response.json();
       
+      if (!data) {
+        console.error('Empty response data received from API');
+        throw new Error('No data received from subscription API');
+      }
+      
+      console.log('API response data available:', Object.keys(data).join(', '));
+      
       if (data.url) {
+        console.log('Received Stripe checkout URL:', data.url.substring(0, 60) + '...');
         toast.success('Redirecting to checkout...', { id: 'subscription' });
         
-        setTimeout(() => {
-          subscriptionAttemptRef.current = false;
+        // Clear subscription attempt flag immediately
+        subscriptionAttemptRef.current = false;
+        
+        try {
+          // More reliable approach - direct window location change
+          console.log('Redirecting to Stripe checkout page...');
+          window.location.href = data.url;
           
-          const form = document.createElement('form');
-          form.method = 'GET';
-          form.action = data.url;
-          document.body.appendChild(form);
-          form.submit();
-        }, 500);
+          // As a fallback, also try form submission after a short delay
+          setTimeout(() => {
+            try {
+              if (document.location.href.indexOf('stripe.com') === -1) {
+                console.log('Fallback: Using form submission for redirection');
+                const form = document.createElement('form');
+                form.method = 'GET';
+                form.action = data.url;
+                form.target = '_self'; // Ensure it opens in the same tab
+                document.body.appendChild(form);
+                form.submit();
+              }
+            } catch (formError) {
+              console.error('Form submission fallback failed:', formError);
+              // Last resort fallback
+              window.open(data.url, '_self');
+            }
+          }, 300);
+        } catch (navigationError) {
+          console.error('Navigation error:', navigationError);
+          // If direct navigation fails, try alternative approach
+          window.open(data.url, '_self');
+        }
         
         return;
       }
