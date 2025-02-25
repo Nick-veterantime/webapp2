@@ -198,6 +198,7 @@ const Timeline: React.FC<TimelineProps> = ({
   );
   const [showPaywallModal, setShowPaywallModal] = useState(false);
   const router = useRouter();
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -454,88 +455,83 @@ const Timeline: React.FC<TimelineProps> = ({
   };
 
   const handleSubscribe = async () => {
+    // Dismiss any existing subscription toasts to prevent UI conflicts
+    toast.dismiss('subscription');
+
+    setIsLoading(true);
+    toast.loading('Preparing your subscription...', { id: 'subscription' });
+    
     try {
-      // Clear any existing subscription toast first
-      toast.dismiss('subscription');
-      
-      // First, try to refresh the session proactively
+      // First try to refresh the session proactively
       try {
+        console.log('Attempting to refresh session before subscription...');
         await auth.refreshSession();
+        console.log('Session refreshed successfully');
       } catch (refreshError) {
-        console.warn('Session refresh failed:', refreshError);
-        // Continue anyway - we'll check if we have a valid session below
+        console.warn('Session refresh failed, will try with current session:', refreshError);
+        // Continue with current session even if refresh fails
       }
       
-      // Now check if we have a valid session
+      // Get the current session
       const { data: { session }, error: sessionError } = await auth.getSession();
       
       if (sessionError) {
         console.error('Session error:', sessionError);
-        toast.error('Authentication error. Please sign in again.', { id: 'auth-error' });
-        
-        // Force a sign out and redirect to home page for re-authentication
-        await auth.signOut();
-        router.push('/');
-        return;
+        toast.error('Authentication error. Please sign in again.', { id: 'subscription' });
+        setIsLoading(false);
+        return; // Don't redirect, just stop the process
       }
       
       if (!session) {
-        toast.error('Please sign in to subscribe');
-        router.push('/');
-        return;
+        console.error('No active session found');
+        toast.error('Please sign in to subscribe', { id: 'subscription' });
+        setIsLoading(false);
+        return; // Don't redirect, just stop the process
       }
-
-      toast.loading('Preparing subscription...', { id: 'subscription' });
-
+      
+      console.log('Session found, making API request...');
+      
+      // Include session token in the request explicitly
       const response = await fetch('/api/subscribe', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          // Add explicit auth header with session token
-          'Authorization': `Bearer ${session.access_token}`
+          'Authorization': `Bearer ${session.access_token}`,
         },
-        // Ensure cookies are sent with the request for authentication
-        credentials: 'include'
       });
-
+      
+      // Handle non-200 responses
       if (!response.ok) {
-        // More detailed error handling based on status code
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Subscription API error:', response.status, errorData);
+        
         if (response.status === 401) {
+          // Authentication error but don't redirect
           toast.error('Authentication error. Please try signing in again.', { id: 'subscription' });
-          // Force a sign out and redirect to home page for re-authentication
-          await auth.signOut();
-          router.push('/');
-          return;
-        } else if (response.status === 500) {
-          toast.error('Server error. Please try again later.', { id: 'subscription' });
-          return;
-        } else {
-          toast.error(`Subscription error (${response.status}). Please try again.`, { id: 'subscription' });
-          return;
+          setIsLoading(false);
+          return; // Don't redirect, just stop the process
         }
+        
+        throw new Error(errorData.error || `Error: ${response.status}`);
       }
-
+      
       const data = await response.json();
       
-      if (data.error) {
-        toast.error(`Failed to start subscription: ${data.error}`, { id: 'subscription' });
+      if (data.url) {
+        toast.success('Redirecting to checkout...', { id: 'subscription' });
+        // Add a small delay to allow the toast to be seen before redirecting
+        setTimeout(() => {
+          window.location.href = data.url;
+        }, 500);
         return;
       }
-
-      if (!data.url) {
-        toast.error('Invalid response from subscription service', { id: 'subscription' });
-        return;
-      }
-
-      toast.success('Redirecting to checkout...', { id: 'subscription' });
       
-      // Small delay to ensure toast is visible before redirect
-      setTimeout(() => {
-        window.location.href = data.url;
-      }, 500);
+      throw new Error('No checkout URL received');
     } catch (error) {
-      console.error('Error initiating subscription:', error);
-      toast.error('Failed to start subscription process. Please try again.', { id: 'subscription' });
+      console.error('Subscription error:', error);
+      toast.error(`Subscription failed: ${error instanceof Error ? error.message : 'Unknown error'}`, { id: 'subscription' });
+    } finally {
+      setIsLoading(false);
     }
   };
 
