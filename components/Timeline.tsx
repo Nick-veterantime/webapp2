@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { HamburgerMenuIcon } from '@radix-ui/react-icons';
 import {
   DropdownMenu,
@@ -179,6 +179,7 @@ const Timeline: React.FC<TimelineProps> = ({
   isPremium = false
 }) => {
   const searchParams = useSearchParams();
+  const subscriptionAttemptRef = useRef<boolean>(false);
   const [tasks, setTasks] = useState<Task[]>(defaultTasks);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -200,6 +201,160 @@ const Timeline: React.FC<TimelineProps> = ({
   const [showPaywallModal, setShowPaywallModal] = useState(false);
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
+
+  const resetSubscriptionState = useCallback(() => {
+    console.log('Resetting subscription state completely');
+    toast.dismiss('subscription');
+    setIsLoading(false);
+    subscriptionAttemptRef.current = false;
+    
+    if (isTaskModalOpen && searchParams.get('canceled') === 'true') {
+      setTimeout(() => {
+        setIsTaskModalOpen(false);
+        setSelectedTask(null);
+      }, 100);
+    }
+  }, [isTaskModalOpen, searchParams]);
+
+  useEffect(() => {
+    resetSubscriptionState();
+    
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('Tab became visible again, resetting subscription state');
+        resetSubscriptionState();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [resetSubscriptionState]);
+
+  useEffect(() => {
+    const canceled = searchParams.get('canceled');
+    const success = searchParams.get('success');
+    
+    if (canceled === 'true') {
+      console.log('User returned from Stripe after canceling');
+      resetSubscriptionState();
+      toast.info('Subscription process was canceled', { duration: 3000 });
+    } else if (success === 'true') {
+      console.log('User returned from Stripe after successful payment');
+      resetSubscriptionState();
+      toast.success('Thank you for subscribing!', { duration: 5000 });
+    }
+  }, [searchParams, resetSubscriptionState]);
+
+  const handleSubscribe = async () => {
+    if (subscriptionAttemptRef.current) {
+      console.log('Subscription already in progress, canceling current attempt');
+      resetSubscriptionState();
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+    
+    subscriptionAttemptRef.current = true;
+    
+    setIsLoading(false);
+    
+    toast.dismiss('subscription');
+    
+    console.log('Starting new subscription attempt');
+    
+    requestAnimationFrame(() => {
+      setIsLoading(true);
+      toast.loading('Preparing your subscription...', { id: 'subscription' });
+      
+      initiateSubscriptionProcess().catch(err => {
+        console.error('Unhandled error in subscription process:', err);
+        resetSubscriptionState();
+      });
+    });
+  };
+  
+  const initiateSubscriptionProcess = async () => {
+    try {
+      try {
+        console.log('Attempting to refresh session before subscription...');
+        await auth.refreshSession();
+        console.log('Session refreshed successfully');
+      } catch (refreshError) {
+        console.warn('Session refresh failed, will try with current session:', refreshError);
+      }
+      
+      const { data: { session }, error: sessionError } = await auth.getSession();
+      
+      const userData = {
+        email: session?.user?.email,
+        userId: session?.user?.id
+      };
+      
+      if (sessionError) {
+        console.warn('Session error but proceeding anyway:', sessionError);
+      }
+      
+      if (!session) {
+        console.warn('No active session found, proceeding with limited user data');
+      } else {
+        console.log('Session found, proceeding with user data');
+      }
+      
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+      
+      console.log('Making API request with user data...');
+      const response = await fetch('/api/subscribe', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(userData)
+      });
+      
+      if (!response.ok) {
+        let errorMessage = `Error: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          console.error('Subscription API error:', response.status, errorData);
+          errorMessage = errorData.error || errorMessage;
+        } catch (e) {
+          console.error('Could not parse error response:', e);
+        }
+        
+        throw new Error(errorMessage);
+      }
+      
+      const data = await response.json();
+      
+      if (data.url) {
+        toast.success('Redirecting to checkout...', { id: 'subscription' });
+        
+        setTimeout(() => {
+          subscriptionAttemptRef.current = false;
+          
+          const form = document.createElement('form');
+          form.method = 'GET';
+          form.action = data.url;
+          document.body.appendChild(form);
+          form.submit();
+        }, 500);
+        
+        return;
+      }
+      
+      throw new Error('No checkout URL received');
+    } catch (error) {
+      console.error('Subscription error:', error);
+      toast.error(`Subscription failed: ${error instanceof Error ? error.message : 'Unknown error'}`, { id: 'subscription' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -292,27 +447,6 @@ const Timeline: React.FC<TimelineProps> = ({
   useEffect(() => {
     setEditingUserData(userData);
   }, [userData]);
-
-  useEffect(() => {
-    // Clean up any existing subscription toasts when component mounts or URL changes
-    toast.dismiss('subscription');
-    
-    // Check for Stripe return parameters
-    const canceled = searchParams.get('canceled');
-    const success = searchParams.get('success');
-    
-    if (canceled === 'true') {
-      console.log('User returned from Stripe after canceling');
-      toast.info('Subscription process was canceled', { duration: 3000 });
-      // Reset loading state in case it was still active
-      setIsLoading(false);
-    } else if (success === 'true') {
-      console.log('User returned from Stripe after successful payment');
-      toast.success('Thank you for subscribing!', { duration: 5000 });
-      // Reset loading state
-      setIsLoading(false);
-    }
-  }, [searchParams]);
 
   const updateEditingUserData = (field: keyof UserData, value: any) => {
     setHasUserMadeChanges(true);
@@ -473,110 +607,6 @@ const Timeline: React.FC<TimelineProps> = ({
     
     if (task.link) {
       window.open(task.link, '_blank');
-    }
-  };
-
-  const handleSubscribe = async () => {
-    // Immediately dismiss any existing subscription toasts to prevent UI conflicts
-    toast.dismiss('subscription');
-    
-    // Reset loading state to ensure we start fresh
-    setIsLoading(false);
-    setTimeout(() => {
-      // Set loading on next tick to ensure UI is updated
-      setIsLoading(true);
-      toast.loading('Preparing your subscription...', { id: 'subscription' });
-      
-      initiateSubscriptionProcess();
-    }, 50);
-  };
-
-  const initiateSubscriptionProcess = async () => {
-    try {
-      // First try to refresh the session proactively
-      try {
-        console.log('Attempting to refresh session before subscription...');
-        await auth.refreshSession();
-        console.log('Session refreshed successfully');
-      } catch (refreshError) {
-        console.warn('Session refresh failed, will try with current session:', refreshError);
-        // Continue with current session even if refresh fails
-      }
-      
-      // Get the current session
-      const { data: { session }, error: sessionError } = await auth.getSession();
-      
-      // Prepare user data - even if we don't have a session, we'll try to proceed
-      const userData = {
-        email: session?.user?.email,
-        userId: session?.user?.id
-      };
-      
-      if (sessionError) {
-        console.warn('Session error but proceeding anyway:', sessionError);
-      }
-      
-      if (!session) {
-        console.warn('No active session found, proceeding with limited user data');
-      } else {
-        console.log('Session found, proceeding with user data');
-      }
-      
-      // Include session token in the request if available
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      
-      if (session?.access_token) {
-        headers['Authorization'] = `Bearer ${session.access_token}`;
-      }
-      
-      console.log('Making API request with user data...');
-      const response = await fetch('/api/subscribe', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(userData)
-      });
-      
-      // Handle non-200 responses
-      if (!response.ok) {
-        let errorMessage = `Error: ${response.status}`;
-        try {
-          const errorData = await response.json();
-          console.error('Subscription API error:', response.status, errorData);
-          errorMessage = errorData.error || errorMessage;
-        } catch (e) {
-          console.error('Could not parse error response:', e);
-        }
-        
-        throw new Error(errorMessage);
-      }
-      
-      const data = await response.json();
-      
-      if (data.url) {
-        toast.success('Redirecting to checkout...', { id: 'subscription' });
-        
-        // Use a more reliable method to redirect to Stripe
-        setTimeout(() => {
-          // Create a form and submit it (more reliable than window.location for some browsers)
-          const form = document.createElement('form');
-          form.method = 'GET';
-          form.action = data.url;
-          document.body.appendChild(form);
-          form.submit();
-        }, 500);
-        
-        return;
-      }
-      
-      throw new Error('No checkout URL received');
-    } catch (error) {
-      console.error('Subscription error:', error);
-      toast.error(`Subscription failed: ${error instanceof Error ? error.message : 'Unknown error'}`, { id: 'subscription' });
-    } finally {
-      // Make sure we reset loading state no matter what
-      setIsLoading(false);
     }
   };
 
