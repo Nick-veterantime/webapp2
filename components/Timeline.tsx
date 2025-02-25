@@ -475,54 +475,67 @@ const Timeline: React.FC<TimelineProps> = ({
       // Get the current session
       const { data: { session }, error: sessionError } = await auth.getSession();
       
+      // Prepare user data - even if we don't have a session, we'll try to proceed
+      const userData = {
+        email: session?.user?.email,
+        userId: session?.user?.id
+      };
+      
       if (sessionError) {
-        console.error('Session error:', sessionError);
-        toast.error('Authentication error. Please sign in again.', { id: 'subscription' });
-        setIsLoading(false);
-        return; // Don't redirect, just stop the process
+        console.warn('Session error but proceeding anyway:', sessionError);
       }
       
       if (!session) {
-        console.error('No active session found');
-        toast.error('Please sign in to subscribe', { id: 'subscription' });
-        setIsLoading(false);
-        return; // Don't redirect, just stop the process
+        console.warn('No active session found, proceeding with limited user data');
+      } else {
+        console.log('Session found, proceeding with user data');
       }
       
-      console.log('Session found, making API request...');
+      // Include session token in the request if available
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
       
-      // Include session token in the request explicitly
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+      
+      console.log('Making API request with user data...');
       const response = await fetch('/api/subscribe', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
+        headers,
+        body: JSON.stringify(userData)
       });
       
       // Handle non-200 responses
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('Subscription API error:', response.status, errorData);
-        
-        if (response.status === 401) {
-          // Authentication error but don't redirect
-          toast.error('Authentication error. Please try signing in again.', { id: 'subscription' });
-          setIsLoading(false);
-          return; // Don't redirect, just stop the process
+        let errorMessage = `Error: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          console.error('Subscription API error:', response.status, errorData);
+          errorMessage = errorData.error || errorMessage;
+        } catch (e) {
+          console.error('Could not parse error response:', e);
         }
         
-        throw new Error(errorData.error || `Error: ${response.status}`);
+        throw new Error(errorMessage);
       }
       
       const data = await response.json();
       
       if (data.url) {
         toast.success('Redirecting to checkout...', { id: 'subscription' });
-        // Add a small delay to allow the toast to be seen before redirecting
+        
+        // Use a more reliable method to redirect to Stripe
         setTimeout(() => {
-          window.location.href = data.url;
+          // Create a form and submit it (more reliable than window.location for some browsers)
+          const form = document.createElement('form');
+          form.method = 'GET';
+          form.action = data.url;
+          document.body.appendChild(form);
+          form.submit();
         }, 500);
+        
         return;
       }
       
