@@ -14,15 +14,6 @@ const nextConfig = {
     // This will allow environment variables to be properly used during build
     serverComponentsExternalPackages: ['@supabase/ssr']
   },
-  // Disable static generation for dynamic routes
-  generateStaticParams: async () => {
-    return [];
-  },
-  // Configure which pages are statically generated vs. dynamic
-  unstable_staticGeneration: {
-    basePath: ['/'],
-    dynamic: 'force-dynamic'
-  },
   async headers() {
     return [
       {

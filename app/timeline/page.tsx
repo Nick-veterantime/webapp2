@@ -2,24 +2,28 @@
 
 export const dynamicRendering = 'force-dynamic';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import dynamic from 'next/dynamic';
 import { getUserData, updateUserData, UserData } from '@/lib/user-data';
 import { auth } from '@/lib/supabase';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 
+// Loading component to use during suspense
+const Loading = () => (
+  <div className="w-full h-screen flex items-center justify-center">
+    <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500"></div>
+  </div>
+);
+
 // Dynamically import Timeline with no SSR
 const DynamicTimeline = dynamic(() => import('@/components/Timeline').then(mod => ({ default: mod.Timeline })), {
   ssr: false,
-  loading: () => (
-    <div className="w-full h-screen flex items-center justify-center">
-      <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500"></div>
-    </div>
-  )
+  loading: Loading
 });
 
-export default function TimelinePage() {
+// Component that uses useSearchParams internally
+function TimelinePageContent() {
   const [userData, setUserData] = useState<UserData | undefined>();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -169,11 +173,7 @@ export default function TimelinePage() {
   };
 
   if (isLoading) {
-    return (
-      <div className="w-full h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500"></div>
-      </div>
-    );
+    return <Loading />;
   }
 
   if (error) {
@@ -208,5 +208,14 @@ export default function TimelinePage() {
         isPremium={userData?.is_premium || false}
       />
     </div>
+  );
+}
+
+// Main component that wraps the content in a Suspense boundary
+export default function TimelinePage() {
+  return (
+    <Suspense fallback={<Loading />}>
+      <TimelinePageContent />
+    </Suspense>
   );
 } 
