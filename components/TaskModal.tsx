@@ -3,13 +3,15 @@ import { Lock } from 'lucide-react';
 
 interface Task {
   id: string;
-  task: string;
-  month: string;
-  track: string;
-  branch: string;
+  title: string;
+  priority: 'low' | 'medium' | 'high';
+  completed: boolean;
   linkedText: string;
   link: string;
   description: string;
+  trackIds: string[];
+  whenMonthsLeft: number[];
+  branchIds: string[];
 }
 
 interface TaskModalProps {
@@ -41,7 +43,7 @@ export function TaskModal({ task, isOpen, onClose, onSubscribe, isPremium }: Tas
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[500px] bg-[#000000] text-white border border-gray-800">
         <DialogHeader>
-          <DialogTitle className="text-2xl font-bold text-white">{task.task}</DialogTitle>
+          <DialogTitle className="text-2xl font-bold text-white">{task.title}</DialogTitle>
           <DialogDescription className="text-gray-400">
             Task details and resources
           </DialogDescription>

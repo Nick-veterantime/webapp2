@@ -28,16 +28,19 @@ import { PaywallModal } from './PaywallModal';
 import { auth } from '@/lib/supabase';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { TaskModal } from './TaskModal';
+import { updateUserData, UserData } from '../lib/user-data';
 
 interface Task {
   id: string;
-  task: string;
-  month: string;
-  track: string;
-  branch: string;
+  title: string;
+  priority: 'low' | 'medium' | 'high';
+  completed: boolean;
   linkedText: string;
   link: string;
   description: string;
+  trackIds: string[];
+  whenMonthsLeft: number[];
+  branchIds: string[];
 }
 
 interface UserInfo {
@@ -104,33 +107,39 @@ const defaultBars: TimelineBarData[] = [
 const defaultTasks: Task[] = [
   {
     id: 'default-1',
-    task: 'Begin Benefits Delivery at Discharge (BDD)',
-    month: '6',
-    track: 'Admin',
-    branch: 'All',
+    title: 'Begin Benefits Delivery at Discharge (BDD)',
+    priority: 'medium',
+    completed: false,
     linkedText: 'Learn more about BDD',
     link: 'https://www.va.gov/disability/how-to-file-claim/when-to-file/pre-discharge-claim/',
-    description: 'Start your VA disability claim process'
+    description: 'Start your VA disability claim process',
+    trackIds: ['Admin'],
+    whenMonthsLeft: [6],
+    branchIds: ['All']
   },
   {
     id: 'default-2',
-    task: 'Schedule TAP Workshop',
-    month: '12',
-    track: 'Admin',
-    branch: 'All',
+    title: 'Schedule TAP Workshop',
+    priority: 'medium',
+    completed: false,
     linkedText: 'TAP Information',
     link: 'https://www.tapevents.org/courses',
-    description: 'Mandatory transition workshop'
+    description: 'Mandatory transition workshop',
+    trackIds: ['Admin'],
+    whenMonthsLeft: [12],
+    branchIds: ['All']
   },
   {
     id: 'default-3',
-    task: 'Begin Job Search',
-    month: '12',
-    track: 'Job',
-    branch: 'All',
+    title: 'Begin Job Search',
+    priority: 'medium',
+    completed: false,
     linkedText: 'Job Search Resources',
     link: 'https://www.dol.gov/agencies/vets',
-    description: 'Start looking for post-service employment'
+    description: 'Start looking for post-service employment',
+    trackIds: ['Job'],
+    whenMonthsLeft: [12],
+    branchIds: ['All']
   }
 ];
 
@@ -150,22 +159,6 @@ const getTrackIcon = (track: string) => {
       return null;
   }
 };
-
-interface UserData {
-  branch: string;
-  rankCategory: string;
-  rank: string;
-  jobCode: string;
-  locationPreference: string;
-  locationType?: 'CONUS' | 'OCONUS';
-  location?: string;
-  consideringAreas?: State[];
-  locationAdditionalInfo?: string;
-  careerGoal: string;
-  separationDate: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
 
 interface TimelineProps {
   visibleTracks?: {
@@ -474,11 +467,15 @@ const Timeline: React.FC<TimelineProps> = ({
         separationDate: selectedDate.toISOString()
       };
 
+      // Call updateUserData function to persist the changes to the database
+      await updateUserData(updatedUserData);
+      
       // Update parent components
       onUpdateUserData?.(updatedUserData);
       
       setShowPersonalizationDialog(false);
       setHasUserMadeChanges(false);
+      toast.success('Settings updated successfully');
     } catch (error) {
       console.error('Error saving user data:', error);
       toast.error('Failed to save settings');
@@ -524,16 +521,20 @@ const Timeline: React.FC<TimelineProps> = ({
     return `${Math.max(0, Math.min(100, percentage))}%`;
   }, [currentDate]);
 
-  const getTasksForTrackAndMonth = (track: string, monthsLeft: number) => {
-    if (!Array.isArray(tasks)) return [];
-    
-    return tasks.filter(task => 
-      task && 
-      task.track && 
-      task.month && 
-      task.track.toLowerCase() === track.toLowerCase() && 
-      task.month.toString() === monthsLeft.toString()
-    );
+  const getTasksForTrackAndMonth = (tasks: Task[], track: string, monthsLeft: number): Task[] => {
+    return tasks.filter(task => {
+      // First filter by track
+      const trackMatch = task.trackIds?.includes(track);
+      
+      // Then filter by month
+      const monthMatch = task.whenMonthsLeft?.includes(monthsLeft);
+      
+      // Then filter by branch - show tasks that are either for "All" branches or the user's specific branch
+      const branchMatch = task.branchIds?.includes('All') || 
+                          (userData?.branch ? task.branchIds?.includes(userData.branch) : false);
+      
+      return trackMatch && monthMatch && branchMatch;
+    });
   };
 
   const handleBarUpdate = (updatedBar: TimelineBarData) => {
@@ -780,14 +781,14 @@ const Timeline: React.FC<TimelineProps> = ({
                         >
                           {isVisible && (
                             <div className="p-2 space-y-1">
-                              {getTasksForTrackAndMonth(track, month.monthsLeft).map(task => (
+                              {getTasksForTrackAndMonth(tasks, track, month.monthsLeft).map(task => (
                                 <button 
                                   key={`${task.id}-${month.monthsLeft}`}
                                   className="w-full text-left"
                                   onClick={() => handleTaskClick(task)}
                                 >
                                   <div className="p-2 rounded-lg bg-gray-800/50 hover:bg-gray-800 transition-colors cursor-pointer border border-gray-700/50">
-                                    <p className="text-sm text-gray-200 line-clamp-2 leading-relaxed">{task.task}</p>
+                                    <p className="text-sm text-gray-200 line-clamp-2 leading-relaxed">{task.title}</p>
                                   </div>
                                 </button>
                               ))}
