@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamicRendering = 'force-dynamic';
+
 import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { getUserData, updateUserData, UserData } from '@/lib/user-data';

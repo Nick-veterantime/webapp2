@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamicRendering = 'force-dynamic';
+
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronRight, ChevronLeft } from 'lucide-react';

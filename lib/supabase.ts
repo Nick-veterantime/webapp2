@@ -5,4 +5,7 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-export const auth = supabase.auth; 
+export const auth = supabase.auth;
+
+// Re-export from the new client implementation
+export * from './supabase/client' 

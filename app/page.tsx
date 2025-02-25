@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamicRendering = 'force-dynamic';
+
 import { useState, useEffect } from 'react';
 import { BranchSelection } from '@/components/BranchSelection';
 import { AuthForm } from '@/components/AuthForm';
