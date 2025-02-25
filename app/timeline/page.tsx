@@ -33,31 +33,31 @@ function TimelinePageContent() {
   const isSuccess = searchParams.get('success') === 'true';
   const isCanceled = searchParams.get('canceled') === 'true';
 
-  // Handle Stripe redirect status
+  // Handle Stripe redirect status immediately
   useEffect(() => {
-    if (isSuccess) {
-      toast.success('Thank you for subscribing!', {
-        description: 'You now have access to the full 60-month timeline.',
-      });
-      
-      // Refresh user data to get updated premium status
-      getUserData().then(data => {
-        if (data) {
-          setUserData({...data, is_premium: true});
-        }
-      }).catch(err => {
-        console.error('Error refreshing user data after subscription:', err);
-      });
-      
-      // Remove the query parameter using router
-      router.replace('/timeline');
-    } else if (isCanceled) {
-      toast.error('Subscription canceled', {
-        description: 'Your subscription was not completed.',
-      });
-      
-      // Make sure loading state is reset on cancel
+    if (isSuccess || isCanceled) {
+      // Immediately set loading to false to avoid showing loading spinner
       setIsLoading(false);
+      
+      // Show appropriate toast notification
+      if (isSuccess) {
+        toast.success('Thank you for subscribing!', {
+          description: 'You now have access to the full 60-month timeline.',
+        });
+        
+        // Refresh user data in the background
+        getUserData().then(data => {
+          if (data) {
+            setUserData({...data, is_premium: true});
+          }
+        }).catch(err => {
+          console.error('Error refreshing user data after subscription:', err);
+        });
+      } else if (isCanceled) {
+        toast.error('Subscription canceled', {
+          description: 'Your subscription was not completed.',
+        });
+      }
       
       // Remove the query parameter using router
       router.replace('/timeline');
@@ -66,10 +66,15 @@ function TimelinePageContent() {
 
   useEffect(() => {
     let mounted = true;
-    let timeoutId: NodeJS.Timeout | null = null;
 
     const checkAuth = async () => {
       try {
+        // Skip auth check if coming back from subscription flow
+        if (isSuccess || isCanceled) {
+          if (mounted) setIsLoading(false);
+          return;
+        }
+        
         const { data: { session }, error: sessionError } = await auth.getSession();
         if (sessionError) throw sessionError;
 
@@ -78,7 +83,7 @@ function TimelinePageContent() {
           return;
         }
 
-        // Show verification reminder only once per session and with a longer duration
+        // Show verification reminder only once per session
         if (!session.user.email_confirmed_at) {
           toast.message(
             'Please verify your email',
@@ -111,6 +116,7 @@ function TimelinePageContent() {
               setUserData(defaultData);
             }
             setIsInitialLoad(false);
+            setIsLoading(false);
           }
         } catch (error: any) {
           console.error('Error fetching user data:', error);
@@ -121,30 +127,23 @@ function TimelinePageContent() {
             return;
           }
           if (mounted) {
-            setError('Failed to load user data. Please try refreshing the page.');
+            // Don't show error UI, just try to continue
+            setIsLoading(false);
           }
         }
       } catch (error) {
         console.error('Error checking auth:', error);
         if (mounted) {
-          setError('Authentication error. Please try signing in again.');
-        }
-      } finally {
-        if (mounted) {
+          // Don't show error UI, just continue loading the page
           setIsLoading(false);
         }
       }
     };
 
-    checkAuth();
-
-    // Set a maximum timeout to prevent infinite loading
-    timeoutId = setTimeout(() => {
-      if (mounted && isLoading) {
-        setIsLoading(false);
-        setError('Loading timed out. Please try refreshing the page.');
-      }
-    }, 10000);
+    // Run auth check but with a small delay to ensure redirect params are processed first
+    const timeoutId = setTimeout(() => {
+      checkAuth();
+    }, 100);
 
     // Set up auth state listener
     const { data: { subscription } } = auth.onAuthStateChange(async (event, session) => {
@@ -169,10 +168,10 @@ function TimelinePageContent() {
 
     return () => {
       mounted = false;
-      if (timeoutId) clearTimeout(timeoutId);
+      clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
-  }, [router]);
+  }, [router, isSuccess, isCanceled]);
 
   const handleUpdateUserData = async (newData: UserData) => {
     try {
@@ -201,37 +200,31 @@ function TimelinePageContent() {
     }
   };
 
-  // Handle retrying after an error
-  const handleRetry = () => {
-    setIsLoading(true);
-    setError(null);
-    router.refresh();
-  };
-
-  if (isLoading && !isSuccess && !isCanceled) {
-    return <Loading />;
-  }
-
-  if (error) {
+  // If there's a subscription redirect, show the timeline right away
+  if (isSuccess || isCanceled) {
+    const defaultVisibleTracks = {
+      mindset: true,
+      admin: true,
+      health: true,
+      job: true,
+      misc: true
+    };
+    
     return (
-      <div className="w-full h-screen flex flex-col items-center justify-center gap-4 p-4 bg-gray-900 text-white">
-        <div className="text-red-400 text-center text-lg">{error}</div>
-        <div className="flex gap-4">
-          <button
-            onClick={handleRetry}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Retry
-          </button>
-          <button
-            onClick={() => router.push('/')}
-            className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
-          >
-            Return to Home
-          </button>
-        </div>
+      <div className="absolute inset-0">
+        <DynamicTimeline 
+          visibleTracks={defaultVisibleTracks}
+          separationDate={userData?.separationDate ? new Date(userData.separationDate) : new Date(new Date().setFullYear(new Date().getFullYear() + 1))}
+          userData={userData}
+          onUpdateUserData={handleUpdateUserData}
+          isPremium={userData?.is_premium || isSuccess || false}
+        />
       </div>
     );
+  }
+
+  if (isLoading) {
+    return <Loading />;
   }
 
   const defaultVisibleTracks = {
