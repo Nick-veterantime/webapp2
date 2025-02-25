@@ -26,7 +26,7 @@ import { State } from '../lib/constants';
 import { toast } from 'sonner';
 import { PaywallModal } from './PaywallModal';
 import { auth } from '@/lib/supabase';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { TaskModal } from './TaskModal';
 
 interface Task {
@@ -178,6 +178,7 @@ const Timeline: React.FC<TimelineProps> = ({
   onUpdateUserData,
   isPremium = false
 }) => {
+  const searchParams = useSearchParams();
   const [tasks, setTasks] = useState<Task[]>(defaultTasks);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -291,6 +292,27 @@ const Timeline: React.FC<TimelineProps> = ({
   useEffect(() => {
     setEditingUserData(userData);
   }, [userData]);
+
+  useEffect(() => {
+    // Clean up any existing subscription toasts when component mounts or URL changes
+    toast.dismiss('subscription');
+    
+    // Check for Stripe return parameters
+    const canceled = searchParams.get('canceled');
+    const success = searchParams.get('success');
+    
+    if (canceled === 'true') {
+      console.log('User returned from Stripe after canceling');
+      toast.info('Subscription process was canceled', { duration: 3000 });
+      // Reset loading state in case it was still active
+      setIsLoading(false);
+    } else if (success === 'true') {
+      console.log('User returned from Stripe after successful payment');
+      toast.success('Thank you for subscribing!', { duration: 5000 });
+      // Reset loading state
+      setIsLoading(false);
+    }
+  }, [searchParams]);
 
   const updateEditingUserData = (field: keyof UserData, value: any) => {
     setHasUserMadeChanges(true);
@@ -455,12 +477,21 @@ const Timeline: React.FC<TimelineProps> = ({
   };
 
   const handleSubscribe = async () => {
-    // Dismiss any existing subscription toasts to prevent UI conflicts
+    // Immediately dismiss any existing subscription toasts to prevent UI conflicts
     toast.dismiss('subscription');
-
-    setIsLoading(true);
-    toast.loading('Preparing your subscription...', { id: 'subscription' });
     
+    // Reset loading state to ensure we start fresh
+    setIsLoading(false);
+    setTimeout(() => {
+      // Set loading on next tick to ensure UI is updated
+      setIsLoading(true);
+      toast.loading('Preparing your subscription...', { id: 'subscription' });
+      
+      initiateSubscriptionProcess();
+    }, 50);
+  };
+
+  const initiateSubscriptionProcess = async () => {
     try {
       // First try to refresh the session proactively
       try {
@@ -544,6 +575,7 @@ const Timeline: React.FC<TimelineProps> = ({
       console.error('Subscription error:', error);
       toast.error(`Subscription failed: ${error instanceof Error ? error.message : 'Unknown error'}`, { id: 'subscription' });
     } finally {
+      // Make sure we reset loading state no matter what
       setIsLoading(false);
     }
   };
