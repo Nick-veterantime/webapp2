@@ -1,5 +1,5 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Lock } from 'lucide-react';
+import { Lock, AlertTriangle } from 'lucide-react';
 
 interface Task {
   id: string;
@@ -18,9 +18,10 @@ interface TaskModalProps {
   onClose: () => void;
   onSubscribe: () => void;
   isPremium: boolean;
+  isStripeBlocked?: boolean;
 }
 
-export function TaskModal({ task, isOpen, onClose, onSubscribe, isPremium }: TaskModalProps) {
+export function TaskModal({ task, isOpen, onClose, onSubscribe, isPremium, isStripeBlocked = false }: TaskModalProps) {
   if (!task) return null;
 
   const handleLinkClick = (e: React.MouseEvent) => {
@@ -46,6 +47,18 @@ export function TaskModal({ task, isOpen, onClose, onSubscribe, isPremium }: Tas
             Task details and resources
           </DialogDescription>
         </DialogHeader>
+
+        {isStripeBlocked && !isPremium && (
+          <div className="mt-4 p-3 bg-amber-950/50 border border-amber-800/50 rounded-md flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-amber-300 font-medium">Ad blocker detected</p>
+              <p className="text-amber-400/80 text-sm mt-1">
+                Please disable your ad blocker or privacy extensions to access premium content.
+              </p>
+            </div>
+          </div>
+        )}
 
         <div className="mt-6 space-y-6">
           {/* Task Description - Free for all users */}
