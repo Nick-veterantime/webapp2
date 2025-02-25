@@ -26,10 +26,10 @@
     "firebase": "^11.2.0",
     "framer-motion": "^11.17.0",
     "lucide-react": "^0.446.0",
-    "next": "^15.1.5",
-    "react": "^19.0.0",
+    "next": "^14.1.0",
+    "react": "^18.2.0",
     "react-day-picker": "^9.5.0",
-    "react-dom": "^19.0.0",
+    "react-dom": "^18.2.0",
     "sonner": "^1.7.4",
     "stripe": "^17.6.0",
     "tailwind-merge": "^2.6.0",
@@ -41,7 +41,7 @@
     "@types/react": "^18.2.48",
     "@types/react-dom": "^18.2.18",
     "eslint": "^8.56.0",
-    "eslint-config-next": "^15.1.5",
+    "eslint-config-next": "^14.1.0",
     "postcss": "^8",
     "typescript": "^5.3.3"
   }
