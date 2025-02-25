@@ -212,24 +212,65 @@ const Timeline: React.FC<TimelineProps> = ({
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
 
-  // Simply check for return status from Stripe on component mount
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('success') === 'true') {
-      toast.success('Subscription successful! Welcome to premium.', { duration: 5000 });
-    } else if (params.get('canceled') === 'true') {
-      toast.info('Subscription canceled. You can try again anytime.', { duration: 5000 });
+  const resetSubscriptionState = useCallback(() => {
+    console.log('Resetting subscription state completely');
+    toast.dismiss('subscription');
+    setIsLoading(false);
+    subscriptionAttemptRef.current = false;
+    
+    if (isTaskModalOpen && searchParams.get('canceled') === 'true') {
+      setTimeout(() => {
+        setIsTaskModalOpen(false);
+        setSelectedTask(null);
+      }, 100);
     }
-  }, []);
-  
-  // Simple subscription handler with minimal state management
+  }, [isTaskModalOpen, searchParams]);
+
+  useEffect(() => {
+    resetSubscriptionState();
+    
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('Tab became visible again, resetting subscription state');
+        resetSubscriptionState();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [resetSubscriptionState]);
+
+  useEffect(() => {
+    const canceled = searchParams.get('canceled');
+    const success = searchParams.get('success');
+    
+    if (canceled === 'true') {
+      console.log('User returned from Stripe after canceling');
+      resetSubscriptionState();
+      toast.info('Subscription process was canceled', { duration: 3000 });
+    } else if (success === 'true') {
+      console.log('User returned from Stripe after successful payment');
+      resetSubscriptionState();
+      toast.success('Thank you for subscribing!', { duration: 5000 });
+    }
+  }, [searchParams, resetSubscriptionState]);
+
   const handleSubscribe = async () => {
     // Prevent multiple clicks
     if (isLoading) return;
     
     try {
       setIsLoading(true);
-      toast.loading('Preparing checkout...', { id: 'checkout' });
+      
+      // Create a short-lived toast that will be automatically dismissed
+      // when redirect happens without needing to manually dismiss it
+      toast.loading('Preparing checkout...', { 
+        id: 'checkout',
+        duration: 3000 // Auto-dismiss after 3 seconds if redirect doesn't happen
+      });
       
       // Basic user info for tracking
       const userData: {
@@ -244,19 +285,24 @@ const Timeline: React.FC<TimelineProps> = ({
         returnUrl: window.location.href // Return to the current page
       };
       
-      // Add auth data if available
-      try {
-        const { data: { session } } = await auth.getSession();
+      // Add auth data if available - but don't await this if it takes too long
+      const authPromise = auth.getSession().then(({ data: { session } }) => {
         if (session?.user) {
           userData.email = session.user.email;
           userData.userId = session.user.id;
         }
-      } catch (err) {
+      }).catch(err => {
         console.warn('Could not get session data:', err);
         // Continue without auth data
-      }
+      });
       
-      // Make the API request
+      // Set a timeout to ensure we don't wait too long for auth
+      const timeoutPromise = new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Wait for auth data but not more than 1 second
+      await Promise.race([authPromise, timeoutPromise]);
+      
+      // Make the API request immediately
       const response = await fetch('/api/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -274,8 +320,14 @@ const Timeline: React.FC<TimelineProps> = ({
         throw new Error('No checkout URL received');
       }
       
-      // Simple redirect to Stripe
-      window.location.href = result.url;
+      // Immediate redirect to Stripe without waiting
+      toast.dismiss('checkout'); // Dismiss the loading toast
+      toast.success('Redirecting to checkout...', { duration: 1500 });
+      
+      // Redirect with a very short timeout to allow the success toast to be seen briefly
+      setTimeout(() => {
+        window.location.href = result.url;
+      }, 300);
       
     } catch (error) {
       console.error('Subscription error:', error);
