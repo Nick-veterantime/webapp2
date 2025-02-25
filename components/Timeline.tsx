@@ -211,34 +211,6 @@ const Timeline: React.FC<TimelineProps> = ({
   const [showPaywallModal, setShowPaywallModal] = useState(false);
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
-  const [isStripeBlocked, setIsStripeBlocked] = useState(false);
-
-  const checkIfStripeIsBlocked = useCallback(async () => {
-    try {
-      // Try to fetch the Stripe.js script to check if it's blocked
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2000);
-      
-      const response = await fetch('https://js.stripe.com/v3/', {
-        method: 'HEAD',
-        signal: controller.signal,
-        mode: 'no-cors' // This will allow the request without expecting CORS headers
-      });
-      
-      clearTimeout(timeoutId);
-      setIsStripeBlocked(false);
-      return false;
-    } catch (error) {
-      console.warn('Stripe resources appear to be blocked:', error);
-      setIsStripeBlocked(true);
-      return true;
-    }
-  }, []);
-
-  useEffect(() => {
-    // Check if Stripe is blocked when component mounts
-    checkIfStripeIsBlocked();
-  }, [checkIfStripeIsBlocked]);
 
   const resetSubscriptionState = useCallback(() => {
     console.log('Resetting subscription state completely');
@@ -314,24 +286,6 @@ const Timeline: React.FC<TimelineProps> = ({
   
   const initiateSubscriptionProcess = async () => {
     try {
-      // Check if Stripe is blocked before proceeding
-      const isBlocked = await checkIfStripeIsBlocked();
-      if (isBlocked) {
-        console.error('Stripe resources are blocked by an extension or firewall');
-        toast.error(
-          <div>
-            <p>Stripe checkout is being blocked.</p>
-            <p className="text-sm mt-1">Please disable ad blockers or privacy extensions for this site and try again.</p>
-          </div>, 
-          { 
-            id: 'subscription',
-            duration: 6000
-          }
-        );
-        resetSubscriptionState();
-        return;
-      }
-      
       let userInfo: UserInfo = {
         // Capture browser info for better tracking
         userAgent: navigator.userAgent,
@@ -703,8 +657,6 @@ const Timeline: React.FC<TimelineProps> = ({
   };
 
   const handleTaskClick = (task: Task) => {
-    // Reset any previous Stripe blocked state when opening a new task
-    setIsStripeBlocked(false);
     setSelectedTask(task);
     setIsTaskModalOpen(true);
   };
@@ -1184,7 +1136,6 @@ const Timeline: React.FC<TimelineProps> = ({
         }}
         onSubscribe={handleSubscribe}
         isPremium={isPremium}
-        isStripeBlocked={isStripeBlocked}
       />
     </div>
   );
