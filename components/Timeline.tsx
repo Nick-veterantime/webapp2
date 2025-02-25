@@ -473,6 +473,9 @@ const Timeline: React.FC<TimelineProps> = ({
       // Update parent components
       onUpdateUserData?.(updatedUserData);
       
+      // Clear task cache to force a refresh of tasks with new branch filtering
+      setLastFetchTime(null);
+      
       setShowPersonalizationDialog(false);
       setHasUserMadeChanges(false);
       toast.success('Settings updated successfully');

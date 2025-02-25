@@ -35,15 +35,33 @@ export async function GET() {
 
     const tasks = records.map(record => {
       const fields = record.fields;
+      
+      // Convert track to trackIds array
+      const trackIds = Array.isArray(fields['Track']) 
+        ? fields['Track'] 
+        : fields['Track'] ? [fields['Track']] : ['Misc'];
+      
+      // Convert month to whenMonthsLeft array of numbers
+      const whenMonthsLeft = Array.isArray(fields['Month']) 
+        ? fields['Month'].map((m: any) => typeof m === 'number' ? m : parseInt(String(m), 10)) 
+        : fields['Month'] ? [typeof fields['Month'] === 'number' ? fields['Month'] : parseInt(String(fields['Month']), 10)] : [6];
+      
+      // Convert branch to branchIds array
+      const branchIds = Array.isArray(fields['Branch']) 
+        ? fields['Branch'] 
+        : fields['Branch'] ? [fields['Branch']] : ['All'];
+      
       return {
         id: record.id,
-        task: fields['Task'],
-        month: fields['Month'],
-        track: fields['Track'],
-        branch: fields['Branch'],
-        linkedText: fields['Linked Text'],
-        link: fields['Link'],
-        description: fields['Description']
+        title: fields['Task'] || 'Untitled Task',
+        priority: fields['Priority'] || 'medium',
+        completed: fields['Completed'] === true,
+        linkedText: fields['Linked Text'] || '',
+        link: fields['Link'] || '',
+        description: fields['Description'] || '',
+        trackIds,
+        whenMonthsLeft,
+        branchIds
       };
     });
 
