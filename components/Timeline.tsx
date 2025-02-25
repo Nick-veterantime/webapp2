@@ -455,6 +455,9 @@ const Timeline: React.FC<TimelineProps> = ({
 
   const handleSubscribe = async () => {
     try {
+      // Clear any existing subscription toast first
+      toast.dismiss('subscription');
+      
       const { data: { session } } = await auth.getSession();
       
       if (!session) {
@@ -503,7 +506,11 @@ const Timeline: React.FC<TimelineProps> = ({
       }
 
       toast.success('Redirecting to checkout...', { id: 'subscription' });
-      window.location.href = data.url;
+      
+      // Small delay to ensure toast is visible before redirect
+      setTimeout(() => {
+        window.location.href = data.url;
+      }, 500);
     } catch (error) {
       console.error('Error initiating subscription:', error);
       toast.error('Failed to start subscription process. Please try again.', { id: 'subscription' });
