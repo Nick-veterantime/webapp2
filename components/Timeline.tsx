@@ -458,7 +458,26 @@ const Timeline: React.FC<TimelineProps> = ({
       // Clear any existing subscription toast first
       toast.dismiss('subscription');
       
-      const { data: { session } } = await auth.getSession();
+      // First, try to refresh the session proactively
+      try {
+        await auth.refreshSession();
+      } catch (refreshError) {
+        console.warn('Session refresh failed:', refreshError);
+        // Continue anyway - we'll check if we have a valid session below
+      }
+      
+      // Now check if we have a valid session
+      const { data: { session }, error: sessionError } = await auth.getSession();
+      
+      if (sessionError) {
+        console.error('Session error:', sessionError);
+        toast.error('Authentication error. Please sign in again.', { id: 'auth-error' });
+        
+        // Force a sign out and redirect to home page for re-authentication
+        await auth.signOut();
+        router.push('/');
+        return;
+      }
       
       if (!session) {
         toast.error('Please sign in to subscribe');
@@ -472,6 +491,8 @@ const Timeline: React.FC<TimelineProps> = ({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          // Add explicit auth header with session token
+          'Authorization': `Bearer ${session.access_token}`
         },
         // Ensure cookies are sent with the request for authentication
         credentials: 'include'
@@ -481,8 +502,9 @@ const Timeline: React.FC<TimelineProps> = ({
         // More detailed error handling based on status code
         if (response.status === 401) {
           toast.error('Authentication error. Please try signing in again.', { id: 'subscription' });
-          // Refresh the auth session
-          await auth.refreshSession();
+          // Force a sign out and redirect to home page for re-authentication
+          await auth.signOut();
+          router.push('/');
           return;
         } else if (response.status === 500) {
           toast.error('Server error. Please try again later.', { id: 'subscription' });
