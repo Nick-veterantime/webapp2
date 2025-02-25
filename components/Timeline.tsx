@@ -470,12 +470,30 @@ const Timeline: React.FC<TimelineProps> = ({
         headers: {
           'Content-Type': 'application/json',
         },
+        // Ensure cookies are sent with the request for authentication
+        credentials: 'include'
       });
+
+      if (!response.ok) {
+        // More detailed error handling based on status code
+        if (response.status === 401) {
+          toast.error('Authentication error. Please try signing in again.', { id: 'subscription' });
+          // Refresh the auth session
+          await auth.refreshSession();
+          return;
+        } else if (response.status === 500) {
+          toast.error('Server error. Please try again later.', { id: 'subscription' });
+          return;
+        } else {
+          toast.error(`Subscription error (${response.status}). Please try again.`, { id: 'subscription' });
+          return;
+        }
+      }
 
       const data = await response.json();
       
       if (data.error) {
-        toast.error('Failed to start subscription process', { id: 'subscription' });
+        toast.error(`Failed to start subscription: ${data.error}`, { id: 'subscription' });
         return;
       }
 
@@ -488,7 +506,7 @@ const Timeline: React.FC<TimelineProps> = ({
       window.location.href = data.url;
     } catch (error) {
       console.error('Error initiating subscription:', error);
-      toast.error('Failed to start subscription process', { id: 'subscription' });
+      toast.error('Failed to start subscription process. Please try again.', { id: 'subscription' });
     }
   };
 
