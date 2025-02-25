@@ -212,211 +212,74 @@ const Timeline: React.FC<TimelineProps> = ({
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
 
-  const resetSubscriptionState = useCallback(() => {
-    console.log('Resetting subscription state completely');
-    toast.dismiss('subscription');
-    setIsLoading(false);
-    subscriptionAttemptRef.current = false;
-    
-    if (isTaskModalOpen && searchParams.get('canceled') === 'true') {
-      setTimeout(() => {
-        setIsTaskModalOpen(false);
-        setSelectedTask(null);
-      }, 100);
-    }
-  }, [isTaskModalOpen, searchParams]);
-
+  // Simply check for return status from Stripe on component mount
   useEffect(() => {
-    resetSubscriptionState();
-    
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        console.log('Tab became visible again, resetting subscription state');
-        resetSubscriptionState();
-      }
-    };
-    
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [resetSubscriptionState]);
-
-  useEffect(() => {
-    const canceled = searchParams.get('canceled');
-    const success = searchParams.get('success');
-    
-    if (canceled === 'true') {
-      console.log('User returned from Stripe after canceling');
-      resetSubscriptionState();
-      toast.info('Subscription process was canceled', { duration: 3000 });
-    } else if (success === 'true') {
-      console.log('User returned from Stripe after successful payment');
-      resetSubscriptionState();
-      toast.success('Thank you for subscribing!', { duration: 5000 });
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('success') === 'true') {
+      toast.success('Subscription successful! Welcome to premium.', { duration: 5000 });
+    } else if (params.get('canceled') === 'true') {
+      toast.info('Subscription canceled. You can try again anytime.', { duration: 5000 });
     }
-  }, [searchParams, resetSubscriptionState]);
-
-  const handleSubscribe = async () => {
-    if (subscriptionAttemptRef.current) {
-      console.log('Subscription already in progress, canceling current attempt');
-      resetSubscriptionState();
-      await new Promise(resolve => setTimeout(resolve, 300));
-    }
-    
-    subscriptionAttemptRef.current = true;
-    
-    setIsLoading(false);
-    
-    toast.dismiss('subscription');
-    
-    console.log('Starting new subscription attempt');
-    
-    requestAnimationFrame(() => {
-      setIsLoading(true);
-      toast.loading('Preparing your subscription...', { id: 'subscription' });
-      
-      initiateSubscriptionProcess().catch(err => {
-        console.error('Unhandled error in subscription process:', err);
-        resetSubscriptionState();
-      });
-    });
-  };
+  }, []);
   
-  const initiateSubscriptionProcess = async () => {
+  // Simple subscription handler with minimal state management
+  const handleSubscribe = async () => {
+    // Prevent multiple clicks
+    if (isLoading) return;
+    
     try {
-      let userInfo: UserInfo = {
-        // Capture browser info for better tracking
-        userAgent: navigator.userAgent,
+      setIsLoading(true);
+      toast.loading('Preparing checkout...', { id: 'checkout' });
+      
+      // Basic user info for tracking
+      const userData: {
+        timestamp: string;
+        source: string;
+        returnUrl: string;
+        email?: string;
+        userId?: string;
+      } = {
         timestamp: new Date().toISOString(),
         source: 'timeline_component',
-        anonymous: true
+        returnUrl: window.location.href // Return to the current page
       };
       
-      // Try to get authentication but proceed even if it fails
+      // Add auth data if available
       try {
-        console.log('Attempting to refresh session before subscription...');
-        await auth.refreshSession();
-        console.log('Session refreshed successfully');
-      } catch (refreshError) {
-        console.warn('Session refresh failed, will proceed with limited data:', refreshError);
+        const { data: { session } } = await auth.getSession();
+        if (session?.user) {
+          userData.email = session.user.email;
+          userData.userId = session.user.id;
+        }
+      } catch (err) {
+        console.warn('Could not get session data:', err);
+        // Continue without auth data
       }
       
-      // Get session info if available
-      const { data: { session }, error: sessionError } = await auth.getSession();
-      
-      if (sessionError) {
-        console.warn('Session error but proceeding anyway:', sessionError);
-      }
-      
-      if (!session) {
-        console.warn('No active session found, proceeding with anonymous checkout');
-      } else {
-        console.log('Session found, proceeding with user data');
-        userInfo = {
-          ...userInfo,
-          email: session?.user?.email,
-          userId: session?.user?.id,
-          anonymous: false
-        };
-      }
-      
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      
-      if (session?.access_token) {
-        headers['Authorization'] = `Bearer ${session.access_token}`;
-      }
-      
-      console.log('Making API request with user data...');
+      // Make the API request
       const response = await fetch('/api/subscribe', {
         method: 'POST',
-        headers,
-        body: JSON.stringify(userInfo)
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(userData)
       });
       
-      // Log response status for debugging
-      console.log(`API response status: ${response.status}`);
-      
-      // Handle both successful and error responses
-      const data = await response.json();
+      // Handle the response
+      const result = await response.json();
       
       if (!response.ok) {
-        console.error('Subscription request failed with status:', response.status, 'Response:', data);
-        
-        // Special handling for auth errors - offer to sign in
-        if (response.status === 401 && data.error?.includes('authentication')) {
-          console.log('Authentication error detected, offering sign-in option');
-          
-          toast.error(`Authentication required. Please sign in first.`, {
-            id: 'subscription',
-            action: {
-              label: 'Sign In',
-              onClick: () => router.push('/login')
-            },
-          });
-          
-          return;
-        }
-        
-        throw new Error(data.error || `Error ${response.status}`);
+        throw new Error(result.error || 'Failed to create checkout session');
       }
       
-      console.log('Subscription API request succeeded');
-      
-      if (!data) {
-        console.error('Empty response data received from API');
-        throw new Error('No data received from subscription API');
+      if (!result.url) {
+        throw new Error('No checkout URL received');
       }
       
-      console.log('API response data available:', Object.keys(data).join(', '));
+      // Simple redirect to Stripe
+      window.location.href = result.url;
       
-      if (data.url) {
-        console.log('Received Stripe checkout URL:', data.url.substring(0, 60) + '...');
-        toast.success('Redirecting to checkout...', { id: 'subscription' });
-        
-        // Clear subscription attempt flag immediately
-        subscriptionAttemptRef.current = false;
-        
-        try {
-          // More reliable approach - direct window location change
-          console.log('Redirecting to Stripe checkout page...');
-          window.location.href = data.url;
-          
-          // As a fallback, also try form submission after a short delay
-          setTimeout(() => {
-            try {
-              if (document.location.href.indexOf('stripe.com') === -1) {
-                console.log('Fallback: Using form submission for redirection');
-                const form = document.createElement('form');
-                form.method = 'GET';
-                form.action = data.url;
-                form.target = '_self'; // Ensure it opens in the same tab
-                document.body.appendChild(form);
-                form.submit();
-              }
-            } catch (formError) {
-              console.error('Form submission fallback failed:', formError);
-              // Last resort fallback
-              window.open(data.url, '_self');
-            }
-          }, 300);
-        } catch (navigationError) {
-          console.error('Navigation error:', navigationError);
-          // If direct navigation fails, try alternative approach
-          window.open(data.url, '_self');
-        }
-        
-        return;
-      }
-      
-      throw new Error('No checkout URL received');
     } catch (error) {
       console.error('Subscription error:', error);
-      toast.error(`Subscription failed: ${error instanceof Error ? error.message : 'Unknown error'}`, { id: 'subscription' });
-    } finally {
+      toast.error(`Checkout failed: ${error instanceof Error ? error.message : 'Unknown error'}`, { id: 'checkout' });
       setIsLoading(false);
     }
   };
