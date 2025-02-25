@@ -313,6 +313,19 @@ const Timeline: React.FC<TimelineProps> = ({
       const result = await response.json();
       
       if (!response.ok) {
+        // Log the detailed error for debugging
+        console.error('API error response:', result);
+        
+        // Check if it's a server configuration error
+        if (result.error && result.error.includes('configuration')) {
+          throw new Error('Server configuration issue. Please contact support.');
+        }
+        
+        // Check if it's a Stripe API error
+        if (result.error && result.error.includes('Stripe error')) {
+          throw new Error(result.error);
+        }
+        
         throw new Error(result.error || 'Failed to create checkout session');
       }
       
@@ -331,7 +344,21 @@ const Timeline: React.FC<TimelineProps> = ({
       
     } catch (error) {
       console.error('Subscription error:', error);
-      toast.error(`Checkout failed: ${error instanceof Error ? error.message : 'Unknown error'}`, { id: 'checkout' });
+      
+      let errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      
+      // More user-friendly error messages
+      if (errorMessage.includes('configuration')) {
+        errorMessage = 'Configuration issue. Our team has been notified.';
+      } else if (errorMessage.includes('price')) {
+        errorMessage = 'Pricing configuration issue. Our team has been notified.';
+      }
+      
+      toast.error(`Checkout failed: ${errorMessage}`, { 
+        id: 'checkout',
+        duration: 5000
+      });
+      
       setIsLoading(false);
     }
   };
