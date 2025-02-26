@@ -63,8 +63,31 @@ function TimelinePageContent() {
         };
         setUserData(extendedData);
         return extendedData;
+      } else {
+        // If no user data exists yet, create default data silently
+        try {
+          const defaultData: UserData = {
+            branch: '',
+            rankCategory: '',
+            rank: '',
+            jobCode: '',
+            locationPreference: '',
+            careerGoal: '',
+            separationDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString()
+          };
+          await updateUserData(defaultData, { silent: true });
+          const extendedDefaultData: ExtendedUserData = {
+            ...defaultData,
+            id: session.user.id,
+            email: session.user.email
+          };
+          setUserData(extendedDefaultData);
+          return extendedDefaultData;
+        } catch (err) {
+          console.error('Error creating default user data:', err);
+          return undefined;
+        }
       }
-      return undefined;
     } catch (err) {
       console.error('Error refreshing user data:', err);
       return undefined;
@@ -224,24 +247,8 @@ function TimelinePageContent() {
 
         // Fetch user data if authenticated
         try {
-          const data = await getUserData();
+          const data = await refreshUserData(); // Use refreshUserData instead
           if (mounted) {
-            if (data) {
-              setUserData(data);
-            } else {
-              // If no user data exists yet, create default data silently
-              const defaultData: UserData = {
-                branch: '',
-                rankCategory: '',
-                rank: '',
-                jobCode: '',
-                locationPreference: '',
-                careerGoal: '',
-                separationDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString()
-              };
-              await updateUserData(defaultData, { silent: true });
-              setUserData(defaultData);
-            }
             setIsInitialLoad(false);
             setIsLoading(false);
           }
@@ -277,11 +284,11 @@ function TimelinePageContent() {
       if (event === 'SIGNED_OUT') {
         router.push('/');
       } else if (event === 'SIGNED_IN' && session) {
+        if (mounted) setIsLoading(true); // Set loading to true when auth state changes
         // Refresh user data when signed in
         try {
-          const data = await getUserData();
-          if (mounted && data) {
-            setUserData(data);
+          const data = await refreshUserData(); // Use refreshUserData instead of getUserData directly
+          if (mounted) {
             setIsLoading(false);
           }
         } catch (error) {
