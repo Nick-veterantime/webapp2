@@ -35,7 +35,6 @@ export function NavigationMenu({
 }: NavigationMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [showPersonalizationDialog, setShowPersonalizationDialog] = useState(false);
-  const [showTimelineBarsDialog, setShowTimelineBarsDialog] = useState(false);
   const [editingUserData, setEditingUserData] = useState<UserData | undefined>(propUserData);
   const [isSaving, setIsSaving] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
@@ -195,17 +194,6 @@ export function NavigationMenu({
           <div className="py-1" role="menu" aria-orientation="vertical">
             <button
               onClick={() => {
-                setShowTimelineBarsDialog(true);
-                setIsOpen(false);
-              }}
-              className="w-full text-left px-4 py-2.5 text-sm text-gray-200 hover:bg-white/5 transition-colors flex items-center gap-2 group"
-              role="menuitem"
-            >
-              <span className="w-1 h-1 rounded-full bg-gray-500 group-hover:bg-blue-400 transition-colors"></span>
-              Edit Timeline Bars
-            </button>
-            <button
-              onClick={() => {
                 setShowPersonalizationDialog(true);
                 setIsOpen(false);
               }}
@@ -260,81 +248,6 @@ export function NavigationMenu({
           </div>
         </div>
       )}
-
-      {/* Timeline Bars Dialog */}
-      <Dialog open={showTimelineBarsDialog} onOpenChange={setShowTimelineBarsDialog}>
-        <DialogContent className="bg-[#1A1B1E] text-gray-200 border-gray-700 max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-semibold text-gray-200">Edit Timeline Bars</DialogTitle>
-            <DialogDescription className="text-gray-400">
-              Manage visibility and customize timeline bars
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 mt-4">
-            {timelineBars?.filter(bar => bar.editable)
-              .map(bar => (
-                <div key={bar.id} className="flex items-start gap-4 p-4 rounded-lg bg-gray-800/50 border border-gray-700/50">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: bar.color }}></div>
-                      <h3 className="font-medium text-gray-200">{bar.name}</h3>
-                    </div>
-                    <div className="mt-2 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <label className="text-sm text-gray-400">Start Days:</label>
-                        <input
-                          type="number"
-                          value={bar.startDays}
-                          onChange={(e) => onUpdateTimelineBars?.(
-                            timelineBars.map(b => 
-                              b.id === bar.id 
-                                ? { ...b, startDays: parseInt(e.target.value) }
-                                : b
-                            )
-                          )}
-                          className="bg-gray-900 border border-gray-700 rounded px-2 py-1 text-sm text-gray-200"
-                        />
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <label className="text-sm text-gray-400">End Days:</label>
-                        <input
-                          type="number"
-                          value={bar.endDays}
-                          onChange={(e) => onUpdateTimelineBars?.(
-                            timelineBars.map(b => 
-                              b.id === bar.id 
-                                ? { ...b, endDays: parseInt(e.target.value) }
-                                : b
-                            )
-                          )}
-                          className="bg-gray-900 border border-gray-700 rounded px-2 py-1 text-sm text-gray-200"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => onUpdateTimelineBars?.(
-                        timelineBars.map(b => 
-                          b.id === bar.id 
-                            ? { ...b, hidden: !b.hidden }
-                            : b
-                        )
-                      )}
-                      className={`h-8 px-3 text-sm font-medium rounded transition-all duration-200 border ${
-                        bar.hidden
-                          ? 'border-gray-600 bg-gray-700/50 text-gray-400'
-                          : 'border-blue-500/30 bg-blue-600/90 text-blue-50 hover:bg-blue-500/90'
-                      }`}
-                    >
-                      {bar.hidden ? 'Show' : 'Hide'}
-                    </button>
-                  </div>
-                </div>
-              ))}
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* Personalization Dialog */}
       <Dialog open={showPersonalizationDialog} onOpenChange={setShowPersonalizationDialog}>

@@ -55,18 +55,21 @@ interface UserInfo {
   [key: string]: any; // Allow additional properties
 }
 
-const tracks = ['Mindset', 'Admin', 'Health', 'Job', 'Misc'];
-const monthsList = [60, 48, 36, 24, 18, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0];
+const tracks = ['Mindset', 'Admin', 'Medical', 'Job', 'Misc'];
+const monthsList = [60, 24, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0];
 
 const defaultBars: TimelineBarData[] = [
   {
     id: 'bdd',
-    name: 'BDD',
+    name: 'Benefits Delivery at Discharge (BDD)',
     startDays: 180,
     endDays: 90,
     color: '#10B981',
     editable: false,
-    row: 0
+    row: 0,
+    description: 'Benefits Delivery at Discharge (BDD) allows Service members to submit a claim for disability compensation 90 to 180 days prior to separation or retirement from active duty.',
+    link: 'https://www.va.gov/disability/how-to-file-claim/when-to-file/pre-discharge-claim/',
+    linkedText: 'Learn more about BDD at VA.gov'
   },
   {
     id: 'disability',
@@ -75,7 +78,10 @@ const defaultBars: TimelineBarData[] = [
     endDays: 0,
     color: '#F59E0B',
     editable: false,
-    row: 0
+    row: 0,
+    description: 'If you don\'t file a BDD claim, you can still file a standard disability claim before your separation date. This ensures faster processing of your disability benefits after transition.',
+    link: 'https://www.va.gov/disability/how-to-file-claim/',
+    linkedText: 'VA Disability Claims Guide'
   },
   {
     id: 'terminal',
@@ -84,7 +90,8 @@ const defaultBars: TimelineBarData[] = [
     endDays: 0,
     color: '#8B5CF6',
     editable: true,
-    row: 0
+    row: 0,
+    description: 'Terminal leave is accrued leave you can use at the end of your service, effectively allowing you to start your transition earlier while still receiving military pay and benefits.'
   },
   {
     id: 'work',
@@ -93,7 +100,8 @@ const defaultBars: TimelineBarData[] = [
     endDays: 0,
     color: '#EC4899',
     editable: true,
-    row: 1
+    row: 1,
+    description: 'Plan when you\'ll be available to start civilian employment after your military service ends. This helps with job search timing and setting expectations with potential employers.'
   },
   {
     id: 'skillbridge',
@@ -102,7 +110,10 @@ const defaultBars: TimelineBarData[] = [
     endDays: 0,
     color: '#3B82F6',
     editable: true,
-    row: 2
+    row: 2,
+    description: 'The DoD SkillBridge program allows service members to gain civilian work experience through specific industry training, apprenticeships, or internships during their last 180 days of service.',
+    link: 'https://skillbridge.osd.mil/',
+    linkedText: 'Official SkillBridge Program'
   }
 ];
 
@@ -151,7 +162,7 @@ const getTrackIcon = (track: string) => {
       return <Brain className="w-4 h-4" />;
     case 'Admin':
       return <FileText className="w-4 h-4" />;
-    case 'Health':
+    case 'Medical':
       return <Stethoscope className="w-4 h-4" />;
     case 'Job':
       return <Briefcase className="w-4 h-4" />;
@@ -166,7 +177,7 @@ interface TimelineProps {
   visibleTracks?: {
     admin: boolean;
     mindset: boolean;
-    health: boolean;
+    medical: boolean;
     job: boolean;
     misc: boolean;
   };
@@ -185,7 +196,7 @@ const Timeline: React.FC<TimelineProps> = ({
 }) => {
   const searchParams = useSearchParams();
   const subscriptionAttemptRef = useRef<boolean>(false);
-  const [tasks, setTasks] = useState<Task[]>(defaultTasks);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastFetchTime, setLastFetchTime] = useState<number | null>(null);
@@ -281,12 +292,12 @@ const Timeline: React.FC<TimelineProps> = ({
       };
       
       // Add auth data if available - but don't await this if it takes too long
-      const authPromise = auth.getSession().then(({ data: { session } }) => {
+      const authPromise = auth.getSession().then(({ data: { session } }: { data: { session: any } }) => {
         if (session?.user) {
           userData.email = session.user.email;
           userData.userId = session.user.id;
         }
-      }).catch(err => {
+      }).catch((err: Error) => {
         console.warn('Could not get session data:', err);
         // Continue without auth data
       });
@@ -358,44 +369,104 @@ const Timeline: React.FC<TimelineProps> = ({
     }
   };
 
+  // Add effect to listen for auth state changes
+  useEffect(() => {
+    let mounted = true;
+    
+    const { data: { subscription } } = auth.onAuthStateChange((event: string, session: unknown) => {
+      if (mounted) {
+        // Force a refresh of tasks when auth state changes
+        setLastFetchTime(null);
+        if (!session && loading) {
+          // If we're still loading but auth is gone, just set loading to false
+          setLoading(false);
+          setTasks([]); // Use empty array instead of defaultTasks
+        }
+      }
+    });
+    
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
   useEffect(() => {
     let mounted = true;
     const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+    
+    // Add a timeout to prevent infinite loading - reduced to 5 seconds for better UX
+    const loadingTimeout = setTimeout(() => {
+      if (mounted && loading) {
+        setTasks([]); // Use empty array instead of defaultTasks
+        setLoading(false);
+        setError('Loading timed out. Please refresh the page to try again.');
+      }
+    }, 5000); // 5 second timeout
+
+    // Track authentication check
+    let authChecked = false;
 
     const fetchTasks = async () => {
       try {
+        // Pre-auth check to make sure we're ready to fetch
+        if (!authChecked) {
+          try {
+            // Check auth status but don't wait more than 1 second
+            const authPromise = auth.getSession();
+            const timeoutPromise = new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Auth check timed out')), 1000)
+            );
+            
+            await Promise.race([authPromise, timeoutPromise]);
+            authChecked = true;
+          } catch (authErr) {
+            authChecked = true; // Proceed with fetch even if auth check fails
+          }
+        }
+
         // Check if we should fetch based on cache duration
         const now = Date.now();
         if (lastFetchTime && (now - lastFetchTime) < CACHE_DURATION) {
+          if (mounted) {
+            setLoading(false);
+          }
           return;
         }
 
+        // Fetch tasks data
         const response = await fetch('/api/tasks');
         if (!response.ok) {
-          throw new Error('Failed to fetch tasks');
+          throw new Error(`Failed to fetch tasks: ${response.status}`);
         }
         const data = await response.json();
         
         if (mounted) {
-          setTasks(data.length > 0 ? data : defaultTasks);
+          setTasks(data.length > 0 ? data : []); // Use empty array instead of defaultTasks
           setLastFetchTime(now);
           setLoading(false);
+          setError(null); // Clear any previous errors
         }
-      } catch (err) {
+      } catch (err: unknown) {
         console.error('Error fetching tasks:', err);
         if (mounted) {
-          setError('Failed to fetch tasks. Using default timeline.');
+          setTasks([]); // Use empty array instead of defaultTasks
+          setError('Failed to fetch tasks. Please refresh to try again.');
           setLoading(false);
         }
       }
     };
 
-    fetchTasks();
+    // Only run fetch if we're in loading state or don't have data
+    if (loading || !lastFetchTime) {
+      fetchTasks();
+    }
 
     return () => {
       mounted = false;
+      clearTimeout(loadingTimeout);
     };
-  }, []);
+  }, [loading]); // Simplify dependency array to only listen to loading changes
 
   useEffect(() => {
     setTimelineBars(defaultBars);
@@ -495,19 +566,29 @@ const Timeline: React.FC<TimelineProps> = ({
     // Show all months without premium restrictions
     for (const monthsLeft of monthsList) {
       const date = subMonths(separationDate, monthsLeft);
+      
+      // Add custom labels for the larger time intervals
+      let label = format(date, 'MMMM yyyy');
+      
+      if (monthsLeft === 60) {
+        label = '5-2 Years Before Separation';
+      } else if (monthsLeft === 24) {
+        label = '2-1 Years Before Separation';
+      } else if (monthsLeft === 12) {
+        label = '1 Year Before Separation';
+      } else if (monthsLeft === 0) {
+        label = 'Post Separation';
+      }
+      
       months.push({
         monthsLeft,
         date,
-        label: format(date, 'MMMM yyyy')
+        label
       });
     }
     
-    // Add Post Separation
-    months.push({
-      monthsLeft: 0,
-      date: separationDate,
-      label: 'Post Separation'
-    });
+    // We no longer need to add a separate Post Separation entry
+    // since it's already included in the monthsList as 0
     
     return months;
   };
@@ -526,22 +607,18 @@ const Timeline: React.FC<TimelineProps> = ({
     return `${Math.max(0, Math.min(100, percentage))}%`;
   }, [currentDate]);
 
-  const getTasksForTrackAndMonth = (tasks: Task[], track: string, monthsLeft: number): Task[] => {
-    // Debug logging for branch filtering
-    console.log('Filtering tasks with user data:', {
-      userBranch: userData?.branch,
-      userLocation: userData?.location,
-      userLocationPreference: userData?.locationPreference,
-      availableTasks: tasks.length,
-      trackFilter: track,
-      monthFilter: monthsLeft
-    });
-
-    // Helper function to normalize branch names
+  const getTasksForTrackAndMonth = (tasks: Task[], trackId: string, monthsLeft: number): Task[] => {
+    if (!tasks || !Array.isArray(tasks)) return [];
+    
+    // Log for debugging
+    console.log(`Filtering for track ${trackId} and month ${monthsLeft}`);
+    
+    // Helper function to normalize branch names for consistent comparison
     const normalizeBranchName = (branch: string): string => {
-      const branchLower = branch.toLowerCase().trim();
+      if (!branch) return 'all';
+      const branchLower = String(branch).trim().toLowerCase();
       
-      // Handle common variations
+      // Handle common variations (standardize to official names)
       if (branchLower === 'marines' || branchLower === 'marine' || branchLower === 'usmc') {
         return 'marine corps';
       }
@@ -563,58 +640,103 @@ const Timeline: React.FC<TimelineProps> = ({
       
       return branchLower;
     };
-
+    
     return tasks.filter(task => {
       // First filter by track
-      const trackMatch = task.trackIds?.includes(track);
+      const trackMatch = task.trackIds?.includes(trackId);
+      if (!trackMatch) return false;
       
-      // Then filter by month
-      const monthMatch = task.whenMonthsLeft?.includes(monthsLeft);
+      // MONTH FILTERING - SIMPLIFIED
+      // Only show tasks that have an exact month match
+      if (!task.whenMonthsLeft || !Array.isArray(task.whenMonthsLeft)) return false;
       
-      // Then filter by branch - show tasks that are either for "All" branches or the user's specific branch
-      const branchMatch = 
-        // Check for "All" branch (case insensitive)
-        task.branchIds?.some(branch => normalizeBranchName(branch) === 'all') || 
-        // Check if user's branch matches any branch in the task (case insensitive with normalization)
-        (userData?.branch ? 
-          task.branchIds?.some(branch => 
-            normalizeBranchName(branch) === normalizeBranchName(userData.branch)
-          ) 
-        : false);
+      // Log task data for debugging
+      console.log(`Task "${task.title}" has months: ${task.whenMonthsLeft.join(',')}. Checking column: ${monthsLeft}`);
       
-      // Location filtering - hide tasks with location requirements if user hasn't specified interest
+      // Only exact month matching - no closest column or special handling
+      const exactMonthMatch = task.whenMonthsLeft.includes(monthsLeft);
+      
+      if (!exactMonthMatch) {
+        console.log(`❌ Task "${task.title}" will NOT show in month ${monthsLeft} (not an exact month match)`);
+        return false;
+      }
+      
+      console.log(`✅ Task "${task.title}" matched month ${monthsLeft}`);
+      
+      // BRANCH FILTERING
+      const normalizedUserBranch = userData?.branch ? normalizeBranchName(userData.branch) : 'none';
+      
+      // Check if task has "All" branch
+      const hasAllBranch = task.branchIds?.some(branch => 
+        normalizeBranchName(branch) === 'all'
+      );
+      
+      // Check if task has the user's branch
+      const hasUserBranch = userData?.branch ? 
+        task.branchIds?.some(branch => 
+          normalizeBranchName(branch) === normalizedUserBranch
+        ) : 
+        false;
+      
+      const branchMatch = hasAllBranch || hasUserBranch;
+      if (!branchMatch) {
+        console.log(`❌ Task "${task.title}" will NOT show (branch mismatch)`);
+        return false;
+      }
+      
+      // LOCATION FILTERING
       let locationMatch = true;
+      
+      // If the task has location data, we need to check user preferences
       if (task.location) {
-        // Only show location-specific tasks if:
-        // 1. User has specified "I have a specific location in mind" AND the location matches, or
-        // 2. User has specified "I'm considering a few options"
-        locationMatch = 
-          (userData?.locationPreference === 'i have a specific location in mind' && 
-           userData?.location && 
-           task.location === userData.location) ||
-          userData?.locationPreference === 'i\'m considering a few options';
+        console.log(`Task has location: "${task.location}"`);
         
-        // Log location filtering
-        if (!locationMatch) {
-          console.log('Task filtered out by location:', {
-            taskTitle: task.title,
-            taskLocation: task.location,
-            userLocationPref: userData?.locationPreference,
-            userLocation: userData?.location
-          });
+        // If the user hasn't set location preferences, hide location-specific tasks
+        if (!userData?.locationPreference) {
+          console.log(`User has no location preference, hiding location-specific task`);
+          locationMatch = false;
+        } 
+        // If user has a specific location in mind (CONUS + state)
+        else if (userData.locationPreference === 'i have a specific location in mind') {
+          if (userData.locationType === 'CONUS' && userData.location) {
+            // Show tasks that match the user's selected state
+            locationMatch = task.location.toLowerCase() === userData.location.toLowerCase();
+            console.log(`User has specific location (${userData.location}), task matches: ${locationMatch}`);
+          } else {
+            // Hide location-specific tasks if no state selected or not CONUS
+            locationMatch = false;
+            console.log(`User has specific location but no state selected or not CONUS, hiding location-specific task`);
+          }
+        }
+        // If user is considering multiple locations
+        else if (userData.locationPreference === 'i\'m considering a few options') {
+          if (userData.consideringAreas && userData.consideringAreas.length > 0) {
+            // Show tasks if the task location is in the user's considering areas
+            locationMatch = userData.consideringAreas.some(
+              area => task.location && task.location.toLowerCase() === area.toLowerCase()
+            );
+            console.log(`User is considering areas: [${userData.consideringAreas.join(', ')}], task location (${task.location}) matches: ${locationMatch}`);
+          } else {
+            // Hide location-specific tasks if no areas selected
+            locationMatch = false;
+            console.log(`User is considering areas but none selected, hiding location-specific task`);
+          }
+        }
+        // If user is open to suggestions or not sure, hide location-specific tasks
+        else {
+          locationMatch = false;
+          console.log(`User is ${userData.locationPreference}, hiding location-specific task`);
         }
       }
       
-      // Add debug logging for rejected tasks
-      if (trackMatch && monthMatch && !branchMatch && userData?.branch) {
-        console.log('Task filtered out by branch:', {
-          taskTitle: task.title,
-          taskBranches: task.branchIds.map(b => normalizeBranchName(b)), 
-          userBranch: normalizeBranchName(userData.branch)
-        });
+      if (!locationMatch) {
+        console.log(`❌ Task "${task.title}" will NOT show (location mismatch)`);
+        return false;
       }
       
-      return trackMatch && monthMatch && branchMatch && locationMatch;
+      // Task passed all filters
+      console.log(`✅ Task "${task.title}" WILL show in month ${monthsLeft} (passed all filters)`);
+      return true;
     });
   };
 
@@ -655,7 +777,7 @@ const Timeline: React.FC<TimelineProps> = ({
     switch (track.toLowerCase()) {
       case 'admin': return visibleTracks.admin;
       case 'mindset': return visibleTracks.mindset;
-      case 'health': return visibleTracks.health;
+      case 'medical': return visibleTracks.medical;
       case 'job': return visibleTracks.job;
       case 'misc': return visibleTracks.misc;
       default: return false;
@@ -699,9 +821,68 @@ const Timeline: React.FC<TimelineProps> = ({
     }
   };
 
+  // Add effect to handle network state and prevent stuck connections
+  useEffect(() => {
+    let mounted = true;
+    
+    // Function to handle online/offline events
+    const handleNetworkChange = () => {
+      if (!mounted) return;
+      
+      const isOnline = navigator.onLine;
+      
+      if (isOnline) {
+        // If we're coming back online, force a refresh of the page
+        // This ensures WebSocket connections are re-established cleanly
+        if (loading) {
+          setLoading(false);
+          setTasks([]);
+          
+          // Force a refresh of the tasks after a short delay
+          setTimeout(() => {
+            if (mounted) {
+              setLastFetchTime(null);
+            }
+          }, 300);
+        }
+      } else {
+        // If we're going offline, set default tasks to ensure content is visible
+        if (loading) {
+          setLoading(false);
+          setTasks([]);
+          setError('Network connection lost. Using default timeline.');
+        }
+      }
+    };
+    
+    // Handle page visibility changes to refresh WebSocket connections
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        handleNetworkChange();
+      }
+    };
+    
+    // Set up event listeners
+    window.addEventListener('online', handleNetworkChange);
+    window.addEventListener('offline', handleNetworkChange);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Initial check
+    handleNetworkChange();
+    
+    // Cleanup function
+    return () => {
+      mounted = false;
+      window.removeEventListener('online', handleNetworkChange);
+      window.removeEventListener('offline', handleNetworkChange);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [loading]);
+
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-[calc(100vh-200px)] text-gray-200">
+      <div className="flex flex-col justify-center items-center h-[calc(100vh-200px)] text-gray-200">
+        <div className="w-12 h-12 border-t-2 border-b-2 border-blue-500 rounded-full animate-spin mb-4"></div>
         <div className="text-lg">Loading tasks...</div>
       </div>
     );
@@ -711,6 +892,89 @@ const Timeline: React.FC<TimelineProps> = ({
     return (
       <div className="flex justify-center items-center h-[calc(100vh-200px)]">
         <div className="text-red-400">Error: {error}</div>
+      </div>
+    );
+  }
+
+  // Add check for empty tasks array
+  if (!tasks || tasks.length === 0) {
+    return (
+      <div className="min-h-screen bg-[#121212] flex flex-col">
+        {/* Keep the header */}
+        <div className="flex justify-between items-center px-4 sm:px-6 py-3 bg-[#1A1B1E] border-b border-gray-800">
+          {/* Left side - Logo */}
+          <div className="flex items-center">
+            <img 
+              src="/veteran-timeline-logo.png" 
+              alt="Veteran Timeline" 
+              className="h-[36px] sm:h-[48px] w-auto object-contain" 
+            />
+          </div>
+
+          {/* Center - Feedback text (hidden on mobile) */}
+          <div className="hidden md:block text-gray-300 mx-8">
+            Have feedback? Book a chat with founder{' '}
+            <a 
+              href="https://www.linkedin.com/in/nicholas-co/" 
+              className="text-blue-400 hover:text-blue-300"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Nick Co
+            </a>
+            {' '}→{' '}
+            <a 
+              href="https://cal.com/nickco/feedback"
+              className="text-blue-400 hover:text-blue-300"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              here
+            </a>
+          </div>
+
+          {/* Right side - Share button and Navigation */}
+          <div className="flex items-center gap-6 relative z-[60]">
+            <div className="hidden md:block">
+              <ShareTimeline 
+                separationDate={separationDate}
+                bars={timelineBars}
+              />
+            </div>
+            <NavigationMenu 
+              userData={userData} 
+              onUpdateUserData={onUpdateUserData} 
+              timelineBars={timelineBars}
+              onUpdateTimelineBars={setTimelineBars}
+              separationDate={separationDate}
+              showMobileMenu={true}
+            />
+          </div>
+        </div>
+
+        {/* Message for empty tasks */}
+        <div className="flex flex-col justify-center items-center h-[calc(100vh-200px)] text-gray-200">
+          <div className="text-lg text-center max-w-lg">
+            <p className="mb-4 text-xl">No tasks available</p>
+            <p className="mb-6 text-gray-400">
+              No tasks have been loaded from your Airtable database. This could be because:
+            </p>
+            <ul className="list-disc text-left text-gray-400 ml-8 mb-6">
+              <li>There are no tasks in your Airtable database</li>
+              <li>Your tasks don't match the filtering criteria</li>
+              <li>There was an issue connecting to Airtable</li>
+            </ul>
+            <button
+              onClick={() => {
+                setLoading(true);
+                setLastFetchTime(null);
+              }}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-500 transition-colors"
+            >
+              Refresh Tasks
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -813,8 +1077,8 @@ const Timeline: React.FC<TimelineProps> = ({
                     return (
                       <td key={index} className="relative">
                         {/* Separation Date Line (Red) */}
-                        {month.monthsLeft === 1 && (
-                          <div className="absolute top-0 right-0 w-px h-screen bg-red-500" style={{ zIndex: 25 }} />
+                        {month.monthsLeft === 0 && (
+                          <div className="absolute top-0 left-0 w-px h-screen bg-red-500" style={{ zIndex: 25 }} />
                         )}
                         
                         {/* Current Date Line (Blue) */}
@@ -899,6 +1163,8 @@ const Timeline: React.FC<TimelineProps> = ({
                                     onDelete={handleBarDelete}
                                     isEditing={isEditingBars}
                                     allBars={timelineBars.filter(b => b.id === 'terminal')}
+                                    isPremium={isPremium}
+                                    onSubscribe={handleSubscribe}
                                   />
                                 ))}
                             </div>
@@ -927,6 +1193,8 @@ const Timeline: React.FC<TimelineProps> = ({
                                     onDelete={handleBarDelete}
                                     isEditing={isEditingBars}
                                     allBars={timelineBars.filter(b => b.id === 'work' || b.id === 'skillbridge')}
+                                    isPremium={isPremium}
+                                    onSubscribe={handleSubscribe}
                                   />
                                 ))}
                             </div>
@@ -937,10 +1205,10 @@ const Timeline: React.FC<TimelineProps> = ({
                     );
                   }
 
-                  if (track === 'Health' && isVisible) {
+                  if (track === 'Medical' && isVisible) {
                     return (
                       <React.Fragment key={`${track}-container`}>
-                        <tr key="health-timeline-bars" className="hover:bg-gray-900/50 transition-colors">
+                        <tr key="medical-timeline-bars" className="hover:bg-gray-900/50 transition-colors">
                           <td className="sticky left-0 z-40 bg-[#1A1B1E] border-r border-gray-800"></td>
                           <td colSpan={monthsData.length} className="relative p-0 h-8">
                             <div className="timeline-container absolute inset-0">
@@ -955,6 +1223,8 @@ const Timeline: React.FC<TimelineProps> = ({
                                     onDelete={handleBarDelete}
                                     isEditing={isEditingBars}
                                     allBars={timelineBars.filter(b => b.id === 'bdd' || b.id === 'disability')}
+                                    isPremium={isPremium}
+                                    onSubscribe={handleSubscribe}
                                   />
                                 ))}
                             </div>

@@ -1,6 +1,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Lock, X } from 'lucide-react';
+import { HeartPulse } from 'lucide-react';
 
 interface PaywallModalProps {
   isOpen: boolean;
@@ -46,7 +47,7 @@ export function PaywallModal({ isOpen, onClose, onSubscribe }: PaywallModalProps
               </li>
               <li className="flex items-center">
                 <span className="text-[#007bff] mr-2">✓</span>
-                Health and benefits tools
+                Medical and benefits tools
               </li>
             </ul>
           </div>

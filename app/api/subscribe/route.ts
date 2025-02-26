@@ -1,11 +1,22 @@
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 
+// Use a dummy test key for development if no key is provided
+// (This is just for local development and won't work for actual charges)
+const DUMMY_TEST_KEY = 'sk_test_dummy_key_for_development_only';
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY || (process.env.NODE_ENV === 'development' ? DUMMY_TEST_KEY : '');
+
 // Pre-initialize Stripe outside the request handler for better performance
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
-  apiVersion: '2025-02-24.acacia',
-  typescript: true,
-});
+let stripe: Stripe | null = null;
+try {
+  stripe = new Stripe(stripeSecretKey, {
+    apiVersion: '2025-02-24.acacia',
+    typescript: true,
+  });
+} catch (error) {
+  // Don't crash the app if Stripe init fails (could be missing key in dev)
+  console.warn('Stripe initialization failed, will use mock responses in development');
+}
 
 // Set to edge runtime for faster performance
 export const runtime = 'edge';
@@ -14,12 +25,19 @@ export const runtime = 'edge';
 const PRODUCT_ID = 'prod_RpRs6B7R7Xp39n';
 
 export async function POST(request: Request) {
-  // Validate Stripe secret key
-  if (!process.env.STRIPE_SECRET_KEY) {
-    console.error('Missing STRIPE_SECRET_KEY environment variable');
+  // For development environment, always return a successful mock response if no key
+  if (process.env.NODE_ENV === 'development' && (!stripeSecretKey || stripeSecretKey === DUMMY_TEST_KEY)) {
+    return NextResponse.json({ 
+      url: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/dashboard?success=true&session_id=dev_session_123&mock=true`,
+      development: true
+    });
+  }
+
+  // Validate Stripe initialization
+  if (!stripe) {
     return NextResponse.json(
-      { error: 'Server configuration error: Missing Stripe secret key' },
-      { status: 500 }
+      { error: 'Stripe service is not available' },
+      { status: 503 }
     );
   }
 
@@ -44,8 +62,6 @@ export async function POST(request: Request) {
     
     // If no price ID is configured, fetch the default price from the product
     if (!priceId) {
-      console.log(`No price ID configured, fetching default price for product ${PRODUCT_ID}`);
-      
       try {
         // Fetch the product from Stripe
         const product = await stripe.products.retrieve(PRODUCT_ID);
@@ -55,23 +71,19 @@ export async function POST(request: Request) {
           priceId = typeof product.default_price === 'string' 
             ? product.default_price 
             : product.default_price.id;
-          
-          console.log(`Using default price ID from product: ${priceId}`);
         } else {
           // If no default price, try to get the first price associated with the product
           const prices = await stripe.prices.list({ product: PRODUCT_ID, limit: 1, active: true });
           
           if (prices.data.length > 0) {
             priceId = prices.data[0].id;
-            console.log(`Using first available price ID for product: ${priceId}`);
           } else {
             throw new Error('No prices found for this product');
           }
         }
       } catch (productError: any) {
-        console.error('Error fetching product or prices:', productError.message);
         return NextResponse.json(
-          { error: `Failed to get pricing information: ${productError.message}` },
+          { error: `Failed to get pricing information` },
           { status: 500 }
         );
       }
@@ -79,14 +91,11 @@ export async function POST(request: Request) {
     
     // Final check to ensure we have a price ID
     if (!priceId) {
-      console.error('Could not determine a price ID for checkout');
       return NextResponse.json(
-        { error: 'Server configuration error: Could not determine product price' },
+        { error: 'Could not determine product price' },
         { status: 500 }
       );
     }
-
-    console.log(`Creating Stripe checkout session with price ID: ${priceId}`);
 
     try {
       // Create Stripe checkout session with minimal configuration
@@ -107,17 +116,15 @@ export async function POST(request: Request) {
       // Fast return of just the URL rather than extra metadata
       return NextResponse.json({ url: session.url });
     } catch (stripeError: any) {
-      // Detailed error logging for Stripe-specific errors
-      console.error('Stripe API error:', stripeError.message);
+      // Simplified error response
       return NextResponse.json(
-        { error: `Stripe error: ${stripeError.message}` },
+        { error: `Payment service error` },
         { status: 500 }
       );
     }
   } catch (error: any) {
-    console.error('Server error in subscribe API:', error.message);
     return NextResponse.json(
-      { error: 'Failed to create checkout session: ' + (error.message || 'Unknown error') },
+      { error: 'Failed to process subscription request' },
       { status: 500 }
     );
   }

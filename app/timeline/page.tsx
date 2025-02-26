@@ -8,6 +8,12 @@ import { getUserData, updateUserData, UserData } from '@/lib/user-data';
 import { auth } from '@/lib/supabase';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
+import { TimelineBarData } from '@/components/TimelineBar';
+import { VisibleTracks } from '@/types/timeline';
+import { Session } from 'next-auth';
+import { createClient } from '@/lib/utils/supabase/client';
+import { NavigationMenu } from '@/components/NavigationMenu';
+import { Timeline } from '@/components/Timeline';
 
 // Loading component to use during suspense
 const Loading = () => (
@@ -146,7 +152,7 @@ function TimelinePageContent() {
     }, 100);
 
     // Set up auth state listener
-    const { data: { subscription } } = auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = auth.onAuthStateChange(async (event: any, session: any) => {
       if (event === 'SIGNED_OUT') {
         router.push('/');
       } else if (event === 'SIGNED_IN' && session) {
@@ -205,7 +211,7 @@ function TimelinePageContent() {
     const defaultVisibleTracks = {
       mindset: true,
       admin: true,
-      health: true,
+      medical: true,
       job: true,
       misc: true
     };
@@ -230,7 +236,7 @@ function TimelinePageContent() {
   const defaultVisibleTracks = {
     mindset: true,
     admin: true,
-    health: true,
+    medical: true,
     job: true,
     misc: true
   };

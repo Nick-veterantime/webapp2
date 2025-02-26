@@ -85,6 +85,50 @@ export function TimelineBarEditor({ bar, onUpdate, open, onOpenChange }: Timelin
               className="col-span-3 bg-gray-800 border border-gray-700 rounded-md p-2"
             />
           </div>
+          
+          {/* Description field */}
+          <div className="grid grid-cols-4 items-start gap-4">
+            <label htmlFor="description" className="text-right">
+              Description
+            </label>
+            <textarea
+              id="description"
+              value={editedBar.description || ''}
+              onChange={(e) => setEditedBar({ ...editedBar, description: e.target.value })}
+              className="col-span-3 bg-gray-800 border border-gray-700 rounded-md p-2 min-h-[80px]"
+              placeholder="Enter a description of this timeline bar"
+            />
+          </div>
+          
+          {/* Link field */}
+          <div className="grid grid-cols-4 items-center gap-4">
+            <label htmlFor="link" className="text-right">
+              Resource Link
+            </label>
+            <input
+              id="link"
+              type="url"
+              value={editedBar.link || ''}
+              onChange={(e) => setEditedBar({ ...editedBar, link: e.target.value })}
+              className="col-span-3 bg-gray-800 border border-gray-700 rounded-md p-2"
+              placeholder="https://example.com"
+            />
+          </div>
+          
+          {/* Link text field */}
+          <div className="grid grid-cols-4 items-center gap-4">
+            <label htmlFor="linkedText" className="text-right">
+              Link Text
+            </label>
+            <input
+              id="linkedText"
+              type="text"
+              value={editedBar.linkedText || ''}
+              onChange={(e) => setEditedBar({ ...editedBar, linkedText: e.target.value })}
+              className="col-span-3 bg-gray-800 border border-gray-700 rounded-md p-2"
+              placeholder="Learn more"
+            />
+          </div>
         </div>
         <div className="flex justify-end gap-2">
           <button

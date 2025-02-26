@@ -1,11 +1,11 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+import { createClient } from './supabase/client';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+// We'll export the client from our singleton implementation instead of creating a new one
+export const supabase = createClient();
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
+// Export the auth instance from the singleton client
 export const auth = supabase.auth;
 
-// Re-export from the new client implementation
+// Re-export from the client implementation for other modules
 export * from './supabase/client' 
