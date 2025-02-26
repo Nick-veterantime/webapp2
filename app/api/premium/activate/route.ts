@@ -106,40 +106,64 @@ export async function POST(req: NextRequest) {
     } else if (userId) {
       // Create new user data entry
       console.log('Creating new user data with premium status for userId:', userId);
+      
+      // First fetch any existing user preferences
+      const { data: existingUser } = await supabase
+        .from('user_data')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
+      
+      // Preserve existing user data if available
+      const baseData = existingUser || {
+        branch: '',
+        rank_category: '',
+        rank: '',
+        job_code: '',
+        location_preference: '',
+        career_goal: '',
+        separation_date: new Date().toISOString(),
+      };
+      
       result = await supabase
         .from('user_data')
         .insert({
           user_id: userId,
+          ...baseData,
           ...subscriptionData,
-          // Default required fields to empty strings
-          branch: '',
-          rank_category: '',
-          rank: '',
-          job_code: '',
-          location_preference: '',
-          career_goal: '',
-          separation_date: new Date().toISOString(),
-          created_at: new Date().toISOString()
+          created_at: existingUser?.created_at || new Date().toISOString()
         })
         .select();
     } else if (session) {
       // Create new user data entry with session user
       const userId = session.user.id;
       console.log('Creating new user data with premium status for session user:', userId);
+      
+      // First fetch any existing user preferences
+      const { data: existingUser } = await supabase
+        .from('user_data')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
+      
+      // Preserve existing user data if available
+      const baseData = existingUser || {
+        branch: '',
+        rank_category: '',
+        rank: '',
+        job_code: '',
+        location_preference: '',
+        career_goal: '',
+        separation_date: new Date().toISOString(),
+      };
+      
       result = await supabase
         .from('user_data')
         .insert({
           user_id: userId,
+          ...baseData,
           ...subscriptionData,
-          // Default required fields to empty strings
-          branch: '',
-          rank_category: '',
-          rank: '',
-          job_code: '',
-          location_preference: '',
-          career_goal: '',
-          separation_date: new Date().toISOString(),
-          created_at: new Date().toISOString()
+          created_at: existingUser?.created_at || new Date().toISOString()
         })
         .select();
     } else {

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { HamburgerMenuIcon } from '@radix-ui/react-icons';
 import {
   DropdownMenu,
@@ -218,6 +218,14 @@ const Timeline: React.FC<TimelineProps> = ({
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
 
+  // Cache for filtered tasks to prevent recalculation
+  const taskFilterCache = useRef<Record<string, Task[]>>({});
+  
+  // Reset task filter cache when tasks or userData change
+  useEffect(() => {
+    taskFilterCache.current = {};
+  }, [tasks, userData]);
+
   const resetSubscriptionState = useCallback(() => {
     console.log('Resetting subscription state completely');
     toast.dismiss('subscription');
@@ -264,12 +272,15 @@ const Timeline: React.FC<TimelineProps> = ({
     }
   }, [searchParams, resetSubscriptionState]);
 
-  const handleSubscribe = async () => {
+  // Prevent multiple subscription attempts
+  const handleSubscribe = useCallback(async () => {
     // Prevent multiple clicks
-    if (isLoading) return;
+    if (isLoading || subscriptionAttemptRef.current) return;
     
     try {
+      subscriptionAttemptRef.current = true;
       setIsLoading(true);
+      setShowPaywallModal(false); // Close the paywall modal immediately
       
       // Create a short-lived toast that will be automatically dismissed
       // when redirect happens without needing to manually dismiss it
@@ -348,26 +359,21 @@ const Timeline: React.FC<TimelineProps> = ({
         window.location.href = result.url;
       }, 300);
       
-    } catch (error) {
-      console.error('Subscription error:', error);
+    } catch (error: any) {
+      console.error('Error in handleSubscribe:', error);
+      toast.dismiss('checkout'); // Make sure to dismiss the loading toast
       
-      let errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      
-      // More user-friendly error messages
-      if (errorMessage.includes('configuration')) {
-        errorMessage = 'Configuration issue. Our team has been notified.';
-      } else if (errorMessage.includes('price')) {
-        errorMessage = 'Pricing configuration issue. Our team has been notified.';
-      }
-      
-      toast.error(`Checkout failed: ${errorMessage}`, { 
-        id: 'checkout',
-        duration: 5000
+      // Show an error toast with a specific ID to prevent duplicates
+      toast.error(error.message || 'Failed to create checkout session', { 
+        id: 'subscription-error',
+        duration: 3000 
       });
       
+      // Reset the subscription attempt state
       setIsLoading(false);
+      subscriptionAttemptRef.current = false;
     }
-  };
+  }, [isLoading]);
 
   // Add effect to listen for auth state changes
   useEffect(() => {
@@ -607,11 +613,16 @@ const Timeline: React.FC<TimelineProps> = ({
     return `${Math.max(0, Math.min(100, percentage))}%`;
   }, [currentDate]);
 
-  const getTasksForTrackAndMonth = (tasks: Task[], trackId: string, monthsLeft: number): Task[] => {
+  const getTasksForTrackAndMonth = useCallback((tasks: Task[], trackId: string, monthsLeft: number): Task[] => {
     if (!tasks || !Array.isArray(tasks)) return [];
     
-    // Log for debugging
-    console.log(`Filtering for track ${trackId} and month ${monthsLeft}`);
+    // Create a cache key
+    const cacheKey = `${trackId}-${monthsLeft}-${userData?.branch || 'none'}-${userData?.locationPreference || 'none'}-${userData?.location || 'none'}`;
+    
+    // Return cached result if available
+    if (taskFilterCache.current[cacheKey]) {
+      return taskFilterCache.current[cacheKey];
+    }
     
     // Helper function to normalize branch names for consistent comparison
     const normalizeBranchName = (branch: string): string => {
@@ -641,7 +652,7 @@ const Timeline: React.FC<TimelineProps> = ({
       return branchLower;
     };
     
-    return tasks.filter(task => {
+    const filteredTasks = tasks.filter(task => {
       // First filter by track
       const trackMatch = task.trackIds?.includes(trackId);
       if (!trackMatch) return false;
@@ -650,18 +661,12 @@ const Timeline: React.FC<TimelineProps> = ({
       // Only show tasks that have an exact month match
       if (!task.whenMonthsLeft || !Array.isArray(task.whenMonthsLeft)) return false;
       
-      // Log task data for debugging
-      console.log(`Task "${task.title}" has months: ${task.whenMonthsLeft.join(',')}. Checking column: ${monthsLeft}`);
-      
       // Only exact month matching - no closest column or special handling
       const exactMonthMatch = task.whenMonthsLeft.includes(monthsLeft);
       
       if (!exactMonthMatch) {
-        console.log(`❌ Task "${task.title}" will NOT show in month ${monthsLeft} (not an exact month match)`);
         return false;
       }
-      
-      console.log(`✅ Task "${task.title}" matched month ${monthsLeft}`);
       
       // BRANCH FILTERING
       const normalizedUserBranch = userData?.branch ? normalizeBranchName(userData.branch) : 'none';
@@ -680,7 +685,6 @@ const Timeline: React.FC<TimelineProps> = ({
       
       const branchMatch = hasAllBranch || hasUserBranch;
       if (!branchMatch) {
-        console.log(`❌ Task "${task.title}" will NOT show (branch mismatch)`);
         return false;
       }
       
@@ -689,11 +693,8 @@ const Timeline: React.FC<TimelineProps> = ({
       
       // If the task has location data, we need to check user preferences
       if (task.location) {
-        console.log(`Task has location: "${task.location}"`);
-        
         // If the user hasn't set location preferences, hide location-specific tasks
         if (!userData?.locationPreference) {
-          console.log(`User has no location preference, hiding location-specific task`);
           locationMatch = false;
         } 
         // If user has a specific location in mind (CONUS + state)
@@ -701,11 +702,9 @@ const Timeline: React.FC<TimelineProps> = ({
           if (userData.locationType === 'CONUS' && userData.location) {
             // Show tasks that match the user's selected state
             locationMatch = task.location.toLowerCase() === userData.location.toLowerCase();
-            console.log(`User has specific location (${userData.location}), task matches: ${locationMatch}`);
           } else {
             // Hide location-specific tasks if no state selected or not CONUS
             locationMatch = false;
-            console.log(`User has specific location but no state selected or not CONUS, hiding location-specific task`);
           }
         }
         // If user is considering multiple locations
@@ -715,30 +714,30 @@ const Timeline: React.FC<TimelineProps> = ({
             locationMatch = userData.consideringAreas.some(
               area => task.location && task.location.toLowerCase() === area.toLowerCase()
             );
-            console.log(`User is considering areas: [${userData.consideringAreas.join(', ')}], task location (${task.location}) matches: ${locationMatch}`);
           } else {
             // Hide location-specific tasks if no areas selected
             locationMatch = false;
-            console.log(`User is considering areas but none selected, hiding location-specific task`);
           }
         }
         // If user is open to suggestions or not sure, hide location-specific tasks
         else {
           locationMatch = false;
-          console.log(`User is ${userData.locationPreference}, hiding location-specific task`);
         }
       }
       
       if (!locationMatch) {
-        console.log(`❌ Task "${task.title}" will NOT show (location mismatch)`);
         return false;
       }
       
       // Task passed all filters
-      console.log(`✅ Task "${task.title}" WILL show in month ${monthsLeft} (passed all filters)`);
       return true;
     });
-  };
+    
+    // Cache the result
+    taskFilterCache.current[cacheKey] = filteredTasks;
+    
+    return filteredTasks;
+  }, [userData]);
 
   const handleBarUpdate = (updatedBar: TimelineBarData) => {
     setTimelineBars(bars => 
@@ -802,12 +801,24 @@ const Timeline: React.FC<TimelineProps> = ({
     }
   };
 
-  const handleTaskClick = (task: Task) => {
+  // Memoize task handlers to prevent recreation on re-renders
+  const handleTaskClick = useCallback((task: Task) => {
     setSelectedTask(task);
     setIsTaskModalOpen(true);
-  };
+  }, []);
 
-  const handleLinkClick = (e: React.MouseEvent, task: Task) => {
+  const handleTaskModalClose = useCallback(() => {
+    // Use a slight delay to prevent flickering and reduce state churn
+    setTimeout(() => {
+      setIsTaskModalOpen(false);
+      // Don't immediately clear the selected task to prevent UI jumping
+      setTimeout(() => {
+        setSelectedTask(null);
+      }, 150);
+    }, 50);
+  }, []);
+
+  const handleLinkClick = useCallback((e: React.MouseEvent, task: Task) => {
     e.preventDefault();
     e.stopPropagation();
     
@@ -819,7 +830,12 @@ const Timeline: React.FC<TimelineProps> = ({
     if (task.link) {
       window.open(task.link, '_blank');
     }
-  };
+  }, [isPremium]);
+
+  // Handle paywall modal close with proper state cleanup
+  const handlePaywallClose = useCallback(() => {
+    setShowPaywallModal(false);
+  }, []);
 
   // Add effect to handle network state and prevent stuck connections
   useEffect(() => {
@@ -899,7 +915,7 @@ const Timeline: React.FC<TimelineProps> = ({
   const monthsData = getMonthsData();
 
   return (
-    <div className="min-h-screen bg-[#121212] flex flex-col">
+    <div className="relative min-h-screen max-h-screen flex flex-col overflow-hidden">
       {/* Header */}
       <div className="flex justify-between items-center px-4 sm:px-6 py-3 bg-[#1A1B1E] border-b border-gray-800">
         {/* Left side - Logo */}
@@ -1338,13 +1354,17 @@ const Timeline: React.FC<TimelineProps> = ({
         </DialogContent>
       </Dialog>
 
+      {/* Paywall and Task Modals */}
+      <PaywallModal 
+        isOpen={showPaywallModal} 
+        onClose={handlePaywallClose}
+        onSubscribe={handleSubscribe} 
+      />
+      
       <TaskModal
         task={selectedTask}
         isOpen={isTaskModalOpen}
-        onClose={() => {
-          setIsTaskModalOpen(false);
-          setSelectedTask(null);
-        }}
+        onClose={handleTaskModalClose}
         onSubscribe={handleSubscribe}
         isPremium={isPremium}
       />

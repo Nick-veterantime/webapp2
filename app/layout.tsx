@@ -44,7 +44,15 @@ export default function RootLayout({
     <html lang="en" className="dark">
       <body className={inter.className}>
         {children}
-        <Toaster richColors position="top-right" />
+        <Toaster 
+          richColors 
+          position="top-right" 
+          closeButton 
+          toastOptions={{
+            duration: 5000, // 5 seconds default duration
+            style: { maxWidth: '500px' }
+          }}
+        />
       </body>
     </html>
   );

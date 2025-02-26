@@ -95,8 +95,10 @@ function TimelinePageContent() {
     
     // Handle Stripe redirect status
     if (success && sessionId) {
-      // Show loading toast
-      const loadingToast = toast.loading('Activating premium features...');
+      // Show loading toast with a timeout (will auto-dismiss after 10 seconds)
+      const loadingToast = toast.loading('Activating premium features...', {
+        duration: 10000 // Auto-dismiss after 10 seconds as a fallback
+      });
       
       // First attempt - refresh user data normally
       refreshUserData().then(userData => {
@@ -140,11 +142,21 @@ function TimelinePageContent() {
           .catch((err: Error) => {
             console.error('Error activating premium status:', err);
             toast.error('Something went wrong. Please contact support.', { id: loadingToast });
+          })
+          .finally(() => {
+            // Ensure the toast is always dismissed regardless of outcome
+            setTimeout(() => {
+              toast.dismiss(loadingToast);
+            }, 1000);
           });
         }
       }).catch((err: Error) => {
         console.error('Error refreshing user data after payment:', err);
         toast.error('Something went wrong. Please contact support.', { id: loadingToast });
+        // Ensure the toast is dismissed even if the refresh fails
+        setTimeout(() => {
+          toast.dismiss(loadingToast);
+        }, 1000);
       });
     }
     
