@@ -193,6 +193,7 @@ function TimelinePageContent() {
 
   useEffect(() => {
     let mounted = true;
+    let redirectAttempted = false;
 
     const checkAuth = async () => {
       try {
@@ -203,10 +204,22 @@ function TimelinePageContent() {
         }
         
         const { data: { session }, error: sessionError } = await auth.getSession();
-        if (sessionError) throw sessionError;
+        
+        if (sessionError) {
+          console.error('Session error:', sessionError);
+          if (!redirectAttempted) {
+            redirectAttempted = true;
+            router.push('/');
+          }
+          return;
+        }
 
         if (!session) {
-          router.push('/');
+          console.log('No session found, redirecting to home');
+          if (!redirectAttempted) {
+            redirectAttempted = true;
+            router.push('/');
+          }
           return;
         }
 
@@ -227,7 +240,11 @@ function TimelinePageContent() {
           const data = await getUserData();
           if (mounted) {
             if (data) {
-              setUserData(data);
+              setUserData({
+                ...data,
+                id: session.user.id,
+                email: session.user.email
+              });
             } else {
               // If no user data exists yet, create default data silently
               const defaultData: UserData = {
@@ -240,7 +257,11 @@ function TimelinePageContent() {
                 separationDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString()
               };
               await updateUserData(defaultData, { silent: true });
-              setUserData(defaultData);
+              setUserData({
+                ...defaultData,
+                id: session.user.id,
+                email: session.user.email
+              });
             }
             setIsInitialLoad(false);
             setIsLoading(false);
@@ -250,7 +271,10 @@ function TimelinePageContent() {
           if (error.message?.includes('JWT expired')) {
             // Handle expired session
             await auth.signOut();
-            router.push('/');
+            if (!redirectAttempted) {
+              redirectAttempted = true;
+              router.push('/');
+            }
             return;
           }
           if (mounted) {
@@ -261,8 +285,11 @@ function TimelinePageContent() {
       } catch (error) {
         console.error('Error checking auth:', error);
         if (mounted) {
-          // Don't show error UI, just continue loading the page
-          setIsLoading(false);
+          // Force redirect on any uncaught errors
+          if (!redirectAttempted) {
+            redirectAttempted = true;
+            router.push('/');
+          }
         }
       }
     };
@@ -272,16 +299,32 @@ function TimelinePageContent() {
       checkAuth();
     }, 100);
 
+    // Add a backup timeout to ensure loading state doesn't get stuck
+    const backupTimeoutId = setTimeout(() => {
+      if (mounted && isLoading && !redirectAttempted) {
+        console.log('Auth check timed out, redirecting to home');
+        redirectAttempted = true;
+        router.push('/');
+      }
+    }, 10000); // 10 second backup timeout
+
     // Set up auth state listener
     const { data: { subscription } } = auth.onAuthStateChange(async (event: any, session: any) => {
       if (event === 'SIGNED_OUT') {
-        router.push('/');
+        if (!redirectAttempted) {
+          redirectAttempted = true;
+          router.push('/');
+        }
       } else if (event === 'SIGNED_IN' && session) {
         // Refresh user data when signed in
         try {
           const data = await getUserData();
           if (mounted && data) {
-            setUserData(data);
+            setUserData({
+              ...data,
+              id: session.user.id,
+              email: session.user.email
+            });
             setIsLoading(false);
           }
         } catch (error) {
@@ -296,6 +339,7 @@ function TimelinePageContent() {
     return () => {
       mounted = false;
       clearTimeout(timeoutId);
+      clearTimeout(backupTimeoutId);
       subscription.unsubscribe();
     };
   }, [router, isSuccess, isCanceled]);
