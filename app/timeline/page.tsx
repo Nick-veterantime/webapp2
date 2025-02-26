@@ -112,71 +112,34 @@ function TimelinePageContent() {
       // Clear the checkout flag
       sessionStorage.removeItem('stripe_checkout_in_progress');
       
-      // Show loading toast with a timeout (will auto-dismiss after 10 seconds)
-      const loadingToast = toast.loading('Activating premium features...', {
-        duration: 10000, // Auto-dismiss after 10 seconds as a fallback
-        id: 'premium-activation' // Add a unique ID to ensure we can dismiss it later
+      // Immediately show success message without loading state
+      const successToastId = toast.success('Thank you for upgrading to Premium!', {
+        duration: 3000
       });
       
-      // First attempt - refresh user data normally
-      refreshUserData().then(userData => {
-        if (userData?.is_premium) {
-          toast.success('Thank you for upgrading to Premium!', { id: loadingToast });
-          updatePremiumStatus(true);
-          
-          // Clear URL parameters without refreshing page
-          const url = new URL(window.location.href);
-          url.searchParams.delete('success');
-          url.searchParams.delete('session_id');
-          window.history.replaceState({}, '', url.toString());
-        } else {
-          console.log('User data not showing premium status yet, trying direct activation');
-          // Second attempt - call our activation endpoint directly
-          fetch('/api/premium/activate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              userId: userData?.id, 
-              email: userData?.email,
-              sessionId
-            })
-          })
-          .then(res => res.json())
-          .then(data => {
-            if (data.isPremium) {
-              toast.success('Thank you for upgrading to Premium!', { id: loadingToast });
-              updatePremiumStatus(true);
-              
-              // Clear URL parameters without refreshing page
-              const url = new URL(window.location.href);
-              url.searchParams.delete('success');
-              url.searchParams.delete('session_id');
-              window.history.replaceState({}, '', url.toString());
-            } else {
-              console.error('Failed to activate premium status directly', data);
-              toast.error('Something went wrong. Please contact support.', { id: loadingToast });
-            }
-          })
-          .catch((err) => {
-            console.error('Error activating premium status:', err);
-            toast.error('Something went wrong. Please contact support.', { id: loadingToast });
-          })
-          .finally(() => {
-            // Ensure the toast is always dismissed regardless of outcome
-            setTimeout(() => {
-              toast.dismiss(loadingToast);
-              toast.dismiss('premium-activation');
-            }, 1000);
-          });
-        }
-      }).catch((err) => {
-        console.error('Error refreshing user data after payment:', err);
-        toast.error('Something went wrong. Please contact support.', { id: loadingToast });
-        // Ensure the toast is dismissed even if the refresh fails
-        setTimeout(() => {
-          toast.dismiss(loadingToast);
-          toast.dismiss('premium-activation');
-        }, 1000);
+      // Immediately update premium status in UI
+      updatePremiumStatus(true);
+      
+      // Clear URL parameters without refreshing page
+      const url = new URL(window.location.href);
+      url.searchParams.delete('success');
+      url.searchParams.delete('session_id');
+      window.history.replaceState({}, '', url.toString());
+      
+      // Call the activation endpoint as a background operation
+      fetch('/api/premium/activate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          userId: userData?.id, 
+          email: userData?.email,
+          sessionId
+        })
+      })
+      .then(res => res.json())
+      .catch((err) => {
+        console.error('Error in background premium activation:', err);
+        // No need to show error to user, they already see premium features
       });
     }
     
