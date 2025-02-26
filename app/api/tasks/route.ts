@@ -36,6 +36,38 @@ export async function GET() {
     const tasks = records.map(record => {
       const fields = record.fields;
       
+      // Helper function to normalize branch names
+      const normalizeBranchName = (branch: string): string => {
+        if (!branch) return 'All';
+        const branchStr = String(branch).trim();
+        
+        // Handle common variations (standardize to official names)
+        const branchLower = branchStr.toLowerCase();
+        if (branchLower === 'marines' || branchLower === 'marine' || branchLower === 'usmc') {
+          return 'Marine Corps';
+        }
+        if (branchLower === 'air' || branchLower === 'usaf') {
+          return 'Air Force';
+        }
+        if (branchLower === 'space' || branchLower === 'ussf') {
+          return 'Space Force';
+        }
+        if (branchLower === 'usa') {
+          return 'Army';
+        }
+        if (branchLower === 'usn') {
+          return 'Navy';
+        }
+        if (branchLower === 'uscg') {
+          return 'Coast Guard';
+        }
+        if (branchLower === 'all') {
+          return 'All';
+        }
+        
+        return branchStr;
+      };
+      
       // Convert track to trackIds array
       const trackIds = Array.isArray(fields['Track']) 
         ? fields['Track'] 
@@ -46,15 +78,19 @@ export async function GET() {
         ? fields['Month'].map((m: any) => typeof m === 'number' ? m : parseInt(String(m), 10)) 
         : fields['Month'] ? [typeof fields['Month'] === 'number' ? fields['Month'] : parseInt(String(fields['Month']), 10)] : [6];
       
-      // Convert branch to branchIds array
-      const branchIds = Array.isArray(fields['Branch']) 
+      // Convert branch to branchIds array with normalized names
+      const originalBranches = Array.isArray(fields['Branch']) 
         ? fields['Branch'].map((b: any) => typeof b === 'string' ? b.trim() : String(b)) 
         : fields['Branch'] ? [typeof fields['Branch'] === 'string' ? fields['Branch'].trim() : String(fields['Branch'])] : ['All'];
+      
+      // Normalize branch names
+      const branchIds = originalBranches.map(branch => normalizeBranchName(branch));
       
       // Log branch information for debugging
       console.log('Task branch data:', {
         title: fields['Task'] || 'Untitled Task',
         originalBranch: fields['Branch'],
+        originalBranches,
         normalizedBranchIds: branchIds
       });
       

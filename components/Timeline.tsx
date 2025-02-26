@@ -533,6 +533,33 @@ const Timeline: React.FC<TimelineProps> = ({
       monthFilter: monthsLeft
     });
 
+    // Helper function to normalize branch names
+    const normalizeBranchName = (branch: string): string => {
+      const branchLower = branch.toLowerCase().trim();
+      
+      // Handle common variations
+      if (branchLower === 'marines' || branchLower === 'marine' || branchLower === 'usmc') {
+        return 'marine corps';
+      }
+      if (branchLower === 'air' || branchLower === 'usaf') {
+        return 'air force';
+      }
+      if (branchLower === 'space' || branchLower === 'ussf') {
+        return 'space force';
+      }
+      if (branchLower === 'usa') {
+        return 'army';
+      }
+      if (branchLower === 'usn') {
+        return 'navy';
+      }
+      if (branchLower === 'uscg') {
+        return 'coast guard';
+      }
+      
+      return branchLower;
+    };
+
     return tasks.filter(task => {
       // First filter by track
       const trackMatch = task.trackIds?.includes(track);
@@ -543,11 +570,11 @@ const Timeline: React.FC<TimelineProps> = ({
       // Then filter by branch - show tasks that are either for "All" branches or the user's specific branch
       const branchMatch = 
         // Check for "All" branch (case insensitive)
-        task.branchIds?.some(branch => branch.toLowerCase() === 'all') || 
-        // Check if user's branch matches any branch in the task (case insensitive)
+        task.branchIds?.some(branch => normalizeBranchName(branch) === 'all') || 
+        // Check if user's branch matches any branch in the task (case insensitive with normalization)
         (userData?.branch ? 
           task.branchIds?.some(branch => 
-            branch.toLowerCase() === userData.branch.toLowerCase()
+            normalizeBranchName(branch) === normalizeBranchName(userData.branch)
           ) 
         : false);
       
@@ -555,8 +582,8 @@ const Timeline: React.FC<TimelineProps> = ({
       if (trackMatch && monthMatch && !branchMatch && userData?.branch) {
         console.log('Task filtered out by branch:', {
           taskTitle: task.title,
-          taskBranches: task.branchIds, 
-          userBranch: userData.branch
+          taskBranches: task.branchIds.map(b => normalizeBranchName(b)), 
+          userBranch: normalizeBranchName(userData.branch)
         });
       }
       
