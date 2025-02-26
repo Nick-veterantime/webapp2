@@ -99,9 +99,9 @@ export default function Home() {
     branch: 'Army',
     separationDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)),
     visibleTracks: {
-      admin: true,
       mindset: true,
-      health: true,
+      admin: true,
+      medical: true,
       job: true,
       misc: true
     },
@@ -122,7 +122,7 @@ export default function Home() {
     const visibleTracks = {
       mindset: currentStep >= 2, // Show after branch selection
       admin: currentStep >= 4,   // Show after paygrade selection
-      health: currentStep >= 6,  // Show after location selection
+      medical: currentStep >= 6,  // Show after location selection
       job: currentStep >= 7,     // Show after life goals selection
       misc: false
     };
@@ -306,14 +306,14 @@ export default function Home() {
                     </div>
                     
                     <p className="text-xl sm:text-2xl text-blue-400 font-semibold leading-relaxed px-4">
-                      Don't miss a step in your military transition journey
+                    Navigate Your Transition with Confidence and Clarity
                     </p>
                   </div>
 
                   {/* Main Value Proposition */}
                   <div className="text-center max-w-2xl px-4">
                     <p className="text-base sm:text-lg text-gray-300">
-                      Your personalized roadmap to a successful transition, with proven milestones and resources tailored to your unique journey.
+                    {/* Build a personalized roadmap for your military transition. Visualize your timeline, complete tailored tasks, and access time-saving resources—all in one place. Join a community of veterans who've walked this path, and step into civilian life with confidence. */}
                     </p>
                   </div>
 
@@ -322,41 +322,41 @@ export default function Home() {
                     <div className="bg-white/5 rounded-xl p-3 sm:p-4 backdrop-blur-sm border border-white/10 transform transition-all duration-300 hover:scale-105 hover:bg-white/10">
                       <div className="text-blue-400 mb-2">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 sm:h-6 sm:w-6 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                       </div>
-                      <h3 className="text-sm sm:text-base font-semibold mb-1 text-center">Complete Checklist</h3>
-                      <p className="text-xs sm:text-sm text-gray-400 text-center">Never miss critical deadlines or requirements</p>
+                      <h3 className="text-sm sm:text-base font-semibold mb-1 text-center">Personalized Checklist</h3>
+                      <p className="text-xs sm:text-sm text-gray-400 text-center">Custom roadmap for your unique transition</p>
                     </div>
 
                     <div className="bg-white/5 rounded-xl p-3 sm:p-4 backdrop-blur-sm border border-white/10 transform transition-all duration-300 hover:scale-105 hover:bg-white/10">
                       <div className="text-blue-400 mb-2">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 sm:h-6 sm:w-6 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10" />
                         </svg>
                       </div>
-                      <h3 className="text-sm sm:text-base font-semibold mb-1 text-center">Maximum Benefits</h3>
-                      <p className="text-xs sm:text-sm text-gray-400 text-center">Discover every resource available</p>
+                      <h3 className="text-sm sm:text-base font-semibold mb-1 text-center">Relevant Benefits</h3>
+                      <p className="text-xs sm:text-sm text-gray-400 text-center">Resources tailored to your situation</p>
                     </div>
 
                     <div className="bg-white/5 rounded-xl p-3 sm:p-4 backdrop-blur-sm border border-white/10 transform transition-all duration-300 hover:scale-105 hover:bg-white/10">
                       <div className="text-blue-400 mb-2">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 sm:h-6 sm:w-6 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
                         </svg>
                       </div>
                       <h3 className="text-sm sm:text-base font-semibold mb-1 text-center">Save Time</h3>
-                      <p className="text-xs sm:text-sm text-gray-400 text-center">Access resources when needed</p>
+                      <p className="text-xs sm:text-sm text-gray-400 text-center">All resources in one place</p>
                     </div>
 
                     <div className="bg-white/5 rounded-xl p-3 sm:p-4 backdrop-blur-sm border border-white/10 transform transition-all duration-300 hover:scale-105 hover:bg-white/10">
                       <div className="text-blue-400 mb-2">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 sm:h-6 sm:w-6 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
                         </svg>
                       </div>
-                      <h3 className="text-sm sm:text-base font-semibold mb-1 text-center">Personalized Path</h3>
-                      <p className="text-xs sm:text-sm text-gray-400 text-center">Tailored to your journey</p>
+                      <h3 className="text-sm sm:text-base font-semibold mb-1 text-center">Clear Starting Point</h3>
+                      <p className="text-xs sm:text-sm text-gray-400 text-center">Begin your transition with confidence</p>
                     </div>
                   </div>
 
@@ -376,14 +376,14 @@ export default function Home() {
                           onClick={() => setShowSignIn(true)}
                           className="text-blue-400 hover:text-blue-300 transition-colors text-sm"
                         >
-                          Already have a timeline? Sign in →
+                          Already started? Sign in →
                         </button>
                       </div>
                     </div>
 
                     {/* Trust Indicators */}
                     <div className="w-full md:flex-1">
-                      <p className="text-gray-400 text-sm mb-3 text-center md:text-right">Trusted by veterans from all branches</p>
+                      <p className="text-gray-400 text-sm mb-3 text-center md:text-right">Trusted by veterans across all branches</p>
                       <div className="flex flex-wrap justify-center md:justify-end gap-2">
                         {branches.map((branch) => (
                           <div 
