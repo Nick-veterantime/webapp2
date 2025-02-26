@@ -48,8 +48,15 @@ export async function GET() {
       
       // Convert branch to branchIds array
       const branchIds = Array.isArray(fields['Branch']) 
-        ? fields['Branch'] 
-        : fields['Branch'] ? [fields['Branch']] : ['All'];
+        ? fields['Branch'].map((b: any) => typeof b === 'string' ? b.trim() : String(b)) 
+        : fields['Branch'] ? [typeof fields['Branch'] === 'string' ? fields['Branch'].trim() : String(fields['Branch'])] : ['All'];
+      
+      // Log branch information for debugging
+      console.log('Task branch data:', {
+        title: fields['Task'] || 'Untitled Task',
+        originalBranch: fields['Branch'],
+        normalizedBranchIds: branchIds
+      });
       
       return {
         id: record.id,

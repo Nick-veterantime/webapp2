@@ -525,6 +525,14 @@ const Timeline: React.FC<TimelineProps> = ({
   }, [currentDate]);
 
   const getTasksForTrackAndMonth = (tasks: Task[], track: string, monthsLeft: number): Task[] => {
+    // Debug logging for branch filtering
+    console.log('Filtering tasks with user branch:', {
+      userBranch: userData?.branch,
+      availableTasks: tasks.length,
+      trackFilter: track,
+      monthFilter: monthsLeft
+    });
+
     return tasks.filter(task => {
       // First filter by track
       const trackMatch = task.trackIds?.includes(track);
@@ -533,8 +541,24 @@ const Timeline: React.FC<TimelineProps> = ({
       const monthMatch = task.whenMonthsLeft?.includes(monthsLeft);
       
       // Then filter by branch - show tasks that are either for "All" branches or the user's specific branch
-      const branchMatch = task.branchIds?.includes('All') || 
-                          (userData?.branch ? task.branchIds?.includes(userData.branch) : false);
+      const branchMatch = 
+        // Check for "All" branch (case insensitive)
+        task.branchIds?.some(branch => branch.toLowerCase() === 'all') || 
+        // Check if user's branch matches any branch in the task (case insensitive)
+        (userData?.branch ? 
+          task.branchIds?.some(branch => 
+            branch.toLowerCase() === userData.branch.toLowerCase()
+          ) 
+        : false);
+      
+      // Add debug logging for rejected tasks
+      if (trackMatch && monthMatch && !branchMatch && userData?.branch) {
+        console.log('Task filtered out by branch:', {
+          taskTitle: task.title,
+          taskBranches: task.branchIds, 
+          userBranch: userData.branch
+        });
+      }
       
       return trackMatch && monthMatch && branchMatch;
     });
