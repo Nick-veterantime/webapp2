@@ -122,6 +122,7 @@ export async function POST(request: Request) {
           },
         ],
         mode: 'subscription',
+        customer_email: metadata.email || requestData.email,
         success_url: `${returnUrl}?success=true&session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${returnUrl}?canceled=true`,
         metadata

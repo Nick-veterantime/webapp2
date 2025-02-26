@@ -23,8 +23,11 @@ export async function POST(request: Request) {
         process.env.STRIPE_WEBHOOK_SECRET!
       );
     } catch (err) {
+      console.error('Webhook signature verification failed:', err);
       return NextResponse.json({ error: 'Webhook signature verification failed' }, { status: 400 });
     }
+
+    console.log('Webhook event received:', { type: event.type, id: event.id });
 
     const cookieStore = await cookies();
     const supabase = createServerClient(
