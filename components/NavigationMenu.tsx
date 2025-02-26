@@ -180,35 +180,29 @@ export function NavigationMenu({
         duration: 3000 // Auto-dismiss after 3 seconds if redirect doesn't happen
       });
       
+      // Get current session data first to ensure we have the latest user ID
+      const { data: { session } } = await auth.getSession();
+      
+      if (!session || !session.user) {
+        toast.error('You need to be signed in to subscribe');
+        setIsLoading(false);
+        return;
+      }
+      
       // Basic user info for tracking
       const userData: {
         timestamp: string;
         source: string;
         returnUrl: string;
-        email?: string;
-        userId?: string;
+        email: string;
+        userId: string;
       } = {
         timestamp: new Date().toISOString(),
         source: 'navigation_menu',
-        returnUrl: window.location.href // Return to the current page
+        returnUrl: window.location.href, // Return to the current page
+        email: session.user.email || '',
+        userId: session.user.id
       };
-      
-      // Add auth data if available - but don't await this if it takes too long
-      const authPromise = auth.getSession().then(({ data: { session } }: { data: { session: any } }) => {
-        if (session?.user) {
-          userData.email = session.user.email;
-          userData.userId = session.user.id;
-        }
-      }).catch((err: Error) => {
-        console.warn('Could not get session data:', err);
-        // Continue without auth data
-      });
-      
-      // Set a timeout to ensure we don't wait too long for auth
-      const timeoutPromise = new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Wait for auth data but not more than 1 second
-      await Promise.race([authPromise, timeoutPromise]);
       
       // Make the API request
       const response = await fetch('/api/subscribe', {

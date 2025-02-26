@@ -9,9 +9,6 @@ import { auth } from '@/lib/supabase';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { TimelineBarData } from '@/components/TimelineBar';
-import { VisibleTracks } from '@/types/timeline';
-import { Session } from 'next-auth';
-import { createClient } from '@/lib/utils/supabase/client';
 import { NavigationMenu } from '@/components/NavigationMenu';
 import { Timeline } from '@/components/Timeline';
 
@@ -51,6 +48,10 @@ function TimelinePageContent() {
           description: 'You now have access to the full 60-month timeline.',
         });
         
+        // Get the session ID from URL if available
+        const sessionId = searchParams.get('session_id');
+        const isMock = searchParams.get('mock') === 'true';
+        
         // Refresh user data in the background and update premium status
         const updatePremiumStatus = async () => {
           try {
@@ -63,9 +64,8 @@ function TimelinePageContent() {
               return;
             }
             
-            // Get the user's email
-            const userEmail = session.user.email;
             const userId = session.user.id;
+            console.log('Updating premium status for user:', userId);
             
             // Get current user data
             const data = await getUserData();
@@ -86,6 +86,8 @@ function TimelinePageContent() {
               
               // Update local state
               setUserData(updatedUserData);
+            } else {
+              console.error('Could not find user data to update premium status');
             }
           } catch (err) {
             console.error('Error updating premium status in database:', err);
@@ -102,7 +104,7 @@ function TimelinePageContent() {
       // Remove the query parameter using router
       router.replace('/timeline');
     }
-  }, [isSuccess, isCanceled, router]);
+  }, [isSuccess, isCanceled, router, searchParams]);
 
   useEffect(() => {
     let mounted = true;
