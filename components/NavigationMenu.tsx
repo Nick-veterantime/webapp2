@@ -46,70 +46,31 @@ export function NavigationMenu({
 
   // Fetch user data when component mounts
   useEffect(() => {
-    let mounted = true;
-    let authChecked = false;
-
     const fetchUserData = async () => {
       try {
-        if (authChecked) return; // Prevent multiple auth checks
-        authChecked = true;
-
-        const { data: sessionData, error: sessionError } = await auth.getSession();
-        
-        if (sessionError) {
-          console.error('Session error in NavigationMenu:', sessionError);
-          return;
-        }
-        
-        if (!sessionData.session) {
-          console.log('No session found in NavigationMenu');
-          return;
-        }
-        
-        const { data: userData, error: userError } = await auth.getUser();
-        if (userError) {
-          console.error('User data error in NavigationMenu:', userError);
-          return;
-        }
-        
-        if (userData.user) {
-          try {
-            const data = await getUserData();
-            if (data && mounted) {
-              // Ensure we have all user data including auth data
-              const enhancedData = {
-                ...data,
-                id: userData.user.id,
-                email: userData.user.email
-              };
-              setEditingUserData(enhancedData);
-              onUpdateUserData?.(enhancedData);
-            }
-          } catch (dataError) {
-            console.error('Error fetching user data in NavigationMenu:', dataError);
+        const { data: { user } } = await auth.getUser();
+        if (user) {
+          const data = await getUserData();
+          if (data) {
+            setEditingUserData(data);
+            onUpdateUserData?.(data);
           }
         }
       } catch (error) {
-        console.error('Error in auth check in NavigationMenu:', error);
+        console.error('Error fetching user data:', error);
       }
     };
 
     fetchUserData();
-
-    return () => {
-      mounted = false;
-    };
   }, [onUpdateUserData]);
 
   // Update local state when prop changes
   useEffect(() => {
-    if (propUserData) {
-      setEditingUserData(propUserData);
-    }
+    setEditingUserData(propUserData);
     if (propUserData?.separationDate) {
       setSelectedDate(new Date(propUserData.separationDate));
     }
-  }, [propUserData]); // This will react to all prop changes, including premium status
+  }, [propUserData]);
 
   // Update selectedDate when editingUserData changes
   useEffect(() => {

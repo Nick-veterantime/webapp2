@@ -10,16 +10,10 @@ const stripeSecretKey = process.env.STRIPE_SECRET_KEY || (process.env.NODE_ENV =
 // Pre-initialize Stripe outside the request handler for better performance
 let stripe: Stripe | null = null;
 try {
-  if (stripeSecretKey && stripeSecretKey !== DUMMY_TEST_KEY) {
-    stripe = new Stripe(stripeSecretKey, {
-      apiVersion: '2025-02-24.acacia',
-      typescript: true,
-    });
-  } else if (process.env.NODE_ENV === 'development') {
-    console.warn('Using mock Stripe client in development mode');
-  } else {
-    console.error('Missing Stripe API key in production environment');
-  }
+  stripe = new Stripe(stripeSecretKey, {
+    apiVersion: '2025-02-24.acacia',
+    typescript: true,
+  });
 } catch (error) {
   // Don't crash the app if Stripe init fails (could be missing key in dev)
   console.warn('Stripe initialization failed, will use mock responses in development');
@@ -33,7 +27,7 @@ const PRODUCT_ID = 'prod_RpRs6B7R7Xp39n';
 
 export async function POST(request: Request) {
   // For development environment, return a mock success response
-  if (process.env.NODE_ENV === 'development') {
+  if (process.env.NODE_ENV === 'development' && process.env.MOCK_STRIPE === 'true') {
     console.log('Using mock Stripe response for development');
     return NextResponse.json({
       url: `http://localhost:3000/timeline?success=true&session_id=dev_session_123&mock=true`,
@@ -42,11 +36,10 @@ export async function POST(request: Request) {
 
   // Validate Stripe initialization
   if (!stripe) {
-    console.error('Stripe service is not available, returning mock for continuity');
-    // Even in production, return a mock response to prevent blocking the user
-    return NextResponse.json({
-      url: `${process.env.NEXT_PUBLIC_SITE_URL || request.headers.get('origin') || 'https://app.veterantimeline.com'}/timeline?success=true&session_id=mock_session_fallback&mock=true`,
-    });
+    return NextResponse.json(
+      { error: 'Stripe service is not available' },
+      { status: 503 }
+    );
   }
 
   try {
@@ -67,12 +60,12 @@ export async function POST(request: Request) {
       } catch (err) {
         // If the returnUrl is invalid, fall back to environment variable or default
         console.warn('Invalid returnUrl, using fallback:', err);
-        origin = process.env.NEXT_PUBLIC_SITE_URL || request.headers.get('origin') || 'https://app.veterantimeline.com';
+        origin = process.env.NEXT_PUBLIC_SITE_URL || 'https://veterantime.app';
         returnUrl = origin + '/timeline';
       }
     } else {
       // Use environment variable if provided
-      origin = process.env.NEXT_PUBLIC_SITE_URL || request.headers.get('origin') || 'https://app.veterantimeline.com';
+      origin = process.env.NEXT_PUBLIC_SITE_URL || 'https://veterantime.app';
       returnUrl = origin + '/timeline';
     }
     
@@ -100,100 +93,89 @@ export async function POST(request: Request) {
       // Continue with request data
     }
 
-    // In production with a real Stripe client, proceed with creating a checkout session
-    if (stripe && process.env.NODE_ENV === 'production') {
+    // Try to get price ID from environment, or from product's default_price
+    let priceId = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID || process.env.STRIPE_PRICE_ID;
+    
+    // If no price ID is configured, fetch the default price from the product
+    if (!priceId) {
       try {
-        // Try to get price ID from environment, or from product's default_price
-        let priceId = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID || process.env.STRIPE_PRICE_ID;
+        // Fetch the product from Stripe
+        const product = await stripe.products.retrieve(PRODUCT_ID);
         
-        // If no price ID is configured, fetch the default price from the product
-        if (!priceId) {
-          try {
-            // Fetch the product from Stripe
-            const product = await stripe.products.retrieve(PRODUCT_ID);
-            
-            // Check if the product has a default price
-            if (product.default_price) {
-              priceId = typeof product.default_price === 'string' 
-                ? product.default_price 
-                : product.default_price.id;
-            } else {
-              // If no default price, try to get the first price associated with the product
-              const prices = await stripe.prices.list({ product: PRODUCT_ID, limit: 1, active: true });
-              
-              if (prices.data.length > 0) {
-                priceId = prices.data[0].id;
-              } else {
-                throw new Error('No prices found for this product');
-              }
-            }
-          } catch (productError: any) {
-            console.error('Failed to get pricing information:', productError);
-            // Return mock response even in production as a fallback
-            return NextResponse.json({
-              url: `${origin}/timeline?success=true&session_id=mock_session_price_error&mock=true`,
-            });
+        // Check if the product has a default price
+        if (product.default_price) {
+          priceId = typeof product.default_price === 'string' 
+            ? product.default_price 
+            : product.default_price.id;
+        } else {
+          // If no default price, try to get the first price associated with the product
+          const prices = await stripe.prices.list({ product: PRODUCT_ID, limit: 1, active: true });
+          
+          if (prices.data.length > 0) {
+            priceId = prices.data[0].id;
+          } else {
+            throw new Error('No prices found for this product');
           }
         }
-        
-        // Final check to ensure we have a price ID
-        if (!priceId) {
-          console.error('Could not determine product price');
-          // Return mock response even in production as a fallback
-          return NextResponse.json({
-            url: `${origin}/timeline?success=true&session_id=mock_session_no_price&mock=true`,
-          });
-        }
-
-        // Create Stripe checkout session with minimal configuration
-        // Ensure the success and cancel URLs are absolute URLs
-        const successUrl = new URL('/timeline', origin);
-        successUrl.searchParams.set('success', 'true');
-        successUrl.searchParams.set('session_id', '{CHECKOUT_SESSION_ID}');
-        
-        const cancelUrl = new URL('/timeline', origin);
-        cancelUrl.searchParams.set('canceled', 'true');
-        
-        console.log('Success URL:', successUrl.toString());
-        console.log('Cancel URL:', cancelUrl.toString());
-        
-        const session = await stripe.checkout.sessions.create({
-          payment_method_types: ['card'],
-          line_items: [
-            {
-              price: priceId,
-              quantity: 1,
-            },
-          ],
-          mode: 'subscription',
-          customer_email: metadata.email || requestData.email,
-          success_url: successUrl.toString(),
-          cancel_url: cancelUrl.toString(),
-          metadata
-        });
-
-        // Fast return of just the URL rather than extra metadata
-        return NextResponse.json({ url: session.url });
-      } catch (stripeError: any) {
-        console.error('Stripe error:', stripeError);
-        // Even in production, return a mock response to prevent blocking the user
-        return NextResponse.json({
-          url: `${origin}/timeline?success=true&session_id=mock_session_stripe_error&mock=true`,
-        });
+      } catch (productError: any) {
+        return NextResponse.json(
+          { error: `Failed to get pricing information` },
+          { status: 500 }
+        );
       }
-    } else {
-      // For any other environment or missing Stripe client, use mock response
-      return NextResponse.json({
-        url: `${origin}/timeline?success=true&session_id=mock_session_dev&mock=true`,
+    }
+    
+    // Final check to ensure we have a price ID
+    if (!priceId) {
+      return NextResponse.json(
+        { error: 'Could not determine product price' },
+        { status: 500 }
+      );
+    }
+
+    try {
+      // Create Stripe checkout session with minimal configuration
+      // Ensure the success and cancel URLs are absolute URLs
+      const successUrl = new URL('/timeline', origin);
+      successUrl.searchParams.set('success', 'true');
+      successUrl.searchParams.set('session_id', '{CHECKOUT_SESSION_ID}');
+      
+      const cancelUrl = new URL('/timeline', origin);
+      cancelUrl.searchParams.set('canceled', 'true');
+      
+      console.log('Success URL:', successUrl.toString());
+      console.log('Cancel URL:', cancelUrl.toString());
+      
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ['card'],
+        line_items: [
+          {
+            price: priceId,
+            quantity: 1,
+          },
+        ],
+        mode: 'subscription',
+        customer_email: metadata.email || requestData.email,
+        success_url: successUrl.toString(),
+        cancel_url: cancelUrl.toString(),
+        metadata
       });
+
+      // Fast return of just the URL rather than extra metadata
+      return NextResponse.json({ url: session.url });
+    } catch (stripeError: any) {
+      console.error('Stripe error:', stripeError);
+      // Simplified error response
+      return NextResponse.json(
+        { error: `Payment service error: ${stripeError.message}` },
+        { status: 500 }
+      );
     }
   } catch (error: any) {
     console.error('Subscription request error:', error);
-    const origin = process.env.NEXT_PUBLIC_SITE_URL || request.headers.get('origin') || 'https://app.veterantimeline.com';
-    
-    // Return a mock response in all cases to ensure the user can continue
-    return NextResponse.json({
-      url: `${origin}/timeline?success=true&session_id=mock_session_request_error&mock=true`,
-    });
+    return NextResponse.json(
+      { error: 'Failed to process subscription request' },
+      { status: 500 }
+    );
   }
 } 

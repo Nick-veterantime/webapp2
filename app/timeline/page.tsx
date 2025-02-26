@@ -101,17 +101,10 @@ function TimelinePageContent() {
         id: 'premium-activation' // Add a unique ID to ensure we can dismiss it later
       });
       
-      // Make sure to dismiss any lingering toast immediately
-      setTimeout(() => {
-        toast.dismiss('premium-activation');
-      }, 50);
-      
       // First attempt - refresh user data normally
       refreshUserData().then(userData => {
         if (userData?.is_premium) {
-          // Dismiss the loading toast and show success
-          toast.dismiss('premium-activation');
-          toast.success('Thank you for upgrading to Premium!', { id: 'premium-success' });
+          toast.success('Thank you for upgrading to Premium!', { id: loadingToast });
           updatePremiumStatus(true);
           
           // Clear URL parameters without refreshing page
@@ -133,11 +126,8 @@ function TimelinePageContent() {
           })
           .then(res => res.json())
           .then(data => {
-            // Always dismiss the loading toast first
-            toast.dismiss('premium-activation');
-            
             if (data.isPremium) {
-              toast.success('Thank you for upgrading to Premium!', { id: 'premium-success' });
+              toast.success('Thank you for upgrading to Premium!', { id: loadingToast });
               updatePremiumStatus(true);
               
               // Clear URL parameters without refreshing page
@@ -147,38 +137,30 @@ function TimelinePageContent() {
               window.history.replaceState({}, '', url.toString());
             } else {
               console.error('Failed to activate premium status directly', data);
-              toast.error('Something went wrong. Please contact support.', { id: 'activation-error' });
+              toast.error('Something went wrong. Please contact support.', { id: loadingToast });
             }
           })
           .catch((err: Error) => {
             console.error('Error activating premium status:', err);
-            // Always dismiss the loading toast
-            toast.dismiss('premium-activation');
-            toast.error('Something went wrong. Please contact support.', { id: 'activation-error' });
+            toast.error('Something went wrong. Please contact support.', { id: loadingToast });
           })
           .finally(() => {
-            // Triple-ensure the toast is always dismissed regardless of outcome
+            // Ensure the toast is always dismissed regardless of outcome
             setTimeout(() => {
+              toast.dismiss(loadingToast);
               toast.dismiss('premium-activation');
-            }, 500);
+            }, 1000);
           });
         }
       }).catch((err: Error) => {
         console.error('Error refreshing user data after payment:', err);
-        // Always dismiss the loading toast
-        toast.dismiss('premium-activation');
-        toast.error('Something went wrong. Please contact support.', { id: 'activation-error' });
-        
+        toast.error('Something went wrong. Please contact support.', { id: loadingToast });
         // Ensure the toast is dismissed even if the refresh fails
         setTimeout(() => {
+          toast.dismiss(loadingToast);
           toast.dismiss('premium-activation');
-        }, 500);
+        }, 1000);
       });
-      
-      // Final failsafe - ensure the toast is dismissed after a reasonable time
-      setTimeout(() => {
-        toast.dismiss('premium-activation');
-      }, 15000);
     }
     
     if (canceled) {
@@ -193,7 +175,6 @@ function TimelinePageContent() {
 
   useEffect(() => {
     let mounted = true;
-    let redirectAttempted = false;
 
     const checkAuth = async () => {
       try {
@@ -204,22 +185,10 @@ function TimelinePageContent() {
         }
         
         const { data: { session }, error: sessionError } = await auth.getSession();
-        
-        if (sessionError) {
-          console.error('Session error:', sessionError);
-          if (!redirectAttempted) {
-            redirectAttempted = true;
-            router.push('/');
-          }
-          return;
-        }
+        if (sessionError) throw sessionError;
 
         if (!session) {
-          console.log('No session found, redirecting to home');
-          if (!redirectAttempted) {
-            redirectAttempted = true;
-            router.push('/');
-          }
+          router.push('/');
           return;
         }
 
@@ -240,11 +209,7 @@ function TimelinePageContent() {
           const data = await getUserData();
           if (mounted) {
             if (data) {
-              setUserData({
-                ...data,
-                id: session.user.id,
-                email: session.user.email
-              });
+              setUserData(data);
             } else {
               // If no user data exists yet, create default data silently
               const defaultData: UserData = {
@@ -257,11 +222,7 @@ function TimelinePageContent() {
                 separationDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString()
               };
               await updateUserData(defaultData, { silent: true });
-              setUserData({
-                ...defaultData,
-                id: session.user.id,
-                email: session.user.email
-              });
+              setUserData(defaultData);
             }
             setIsInitialLoad(false);
             setIsLoading(false);
@@ -271,10 +232,7 @@ function TimelinePageContent() {
           if (error.message?.includes('JWT expired')) {
             // Handle expired session
             await auth.signOut();
-            if (!redirectAttempted) {
-              redirectAttempted = true;
-              router.push('/');
-            }
+            router.push('/');
             return;
           }
           if (mounted) {
@@ -285,11 +243,8 @@ function TimelinePageContent() {
       } catch (error) {
         console.error('Error checking auth:', error);
         if (mounted) {
-          // Force redirect on any uncaught errors
-          if (!redirectAttempted) {
-            redirectAttempted = true;
-            router.push('/');
-          }
+          // Don't show error UI, just continue loading the page
+          setIsLoading(false);
         }
       }
     };
@@ -299,32 +254,16 @@ function TimelinePageContent() {
       checkAuth();
     }, 100);
 
-    // Add a backup timeout to ensure loading state doesn't get stuck
-    const backupTimeoutId = setTimeout(() => {
-      if (mounted && isLoading && !redirectAttempted) {
-        console.log('Auth check timed out, redirecting to home');
-        redirectAttempted = true;
-        router.push('/');
-      }
-    }, 10000); // 10 second backup timeout
-
     // Set up auth state listener
     const { data: { subscription } } = auth.onAuthStateChange(async (event: any, session: any) => {
       if (event === 'SIGNED_OUT') {
-        if (!redirectAttempted) {
-          redirectAttempted = true;
-          router.push('/');
-        }
+        router.push('/');
       } else if (event === 'SIGNED_IN' && session) {
         // Refresh user data when signed in
         try {
           const data = await getUserData();
           if (mounted && data) {
-            setUserData({
-              ...data,
-              id: session.user.id,
-              email: session.user.email
-            });
+            setUserData(data);
             setIsLoading(false);
           }
         } catch (error) {
@@ -339,7 +278,6 @@ function TimelinePageContent() {
     return () => {
       mounted = false;
       clearTimeout(timeoutId);
-      clearTimeout(backupTimeoutId);
       subscription.unsubscribe();
     };
   }, [router, isSuccess, isCanceled]);
