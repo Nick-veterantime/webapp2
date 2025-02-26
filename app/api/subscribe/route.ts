@@ -30,7 +30,7 @@ export async function POST(request: Request) {
   if (process.env.NODE_ENV === 'development' && process.env.MOCK_STRIPE === 'true') {
     console.log('Using mock Stripe response for development');
     return NextResponse.json({
-      url: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/timeline?success=true&session_id=dev_session_123&mock=true`,
+      url: `http://localhost:3000/timeline?success=true&session_id=dev_session_123&mock=true`,
     });
   }
 
@@ -46,8 +46,30 @@ export async function POST(request: Request) {
     // Parse request body - this is faster than creating server clients and checking auth
     const requestData = await request.json();
     
-    // Get the return URL from the request or use a default
-    const returnUrl = requestData.returnUrl || process.env.NEXT_PUBLIC_SITE_URL || 'https://veterantime.app';
+    // Extract the origin from the return URL
+    let origin: string;
+    let returnUrl: string;
+    
+    // Determine the origin for success/cancel URLs
+    if (requestData.returnUrl) {
+      try {
+        // Extract the origin from the return URL
+        const url = new URL(requestData.returnUrl);
+        origin = url.origin;
+        returnUrl = requestData.returnUrl;
+      } catch (err) {
+        // If the returnUrl is invalid, fall back to environment variable or default
+        console.warn('Invalid returnUrl, using fallback:', err);
+        origin = process.env.NEXT_PUBLIC_SITE_URL || 'https://veterantime.app';
+        returnUrl = origin + '/timeline';
+      }
+    } else {
+      // Use environment variable if provided
+      origin = process.env.NEXT_PUBLIC_SITE_URL || 'https://veterantime.app';
+      returnUrl = origin + '/timeline';
+    }
+    
+    console.log('Using origin for redirects:', origin);
     
     // Minimal metadata for tracking
     const metadata: Record<string, string> = {
@@ -113,6 +135,17 @@ export async function POST(request: Request) {
 
     try {
       // Create Stripe checkout session with minimal configuration
+      // Ensure the success and cancel URLs are absolute URLs
+      const successUrl = new URL('/timeline', origin);
+      successUrl.searchParams.set('success', 'true');
+      successUrl.searchParams.set('session_id', '{CHECKOUT_SESSION_ID}');
+      
+      const cancelUrl = new URL('/timeline', origin);
+      cancelUrl.searchParams.set('canceled', 'true');
+      
+      console.log('Success URL:', successUrl.toString());
+      console.log('Cancel URL:', cancelUrl.toString());
+      
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ['card'],
         line_items: [
@@ -123,21 +156,23 @@ export async function POST(request: Request) {
         ],
         mode: 'subscription',
         customer_email: metadata.email || requestData.email,
-        success_url: `${returnUrl || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/timeline?success=true&session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${returnUrl || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/timeline?canceled=true`,
+        success_url: successUrl.toString(),
+        cancel_url: cancelUrl.toString(),
         metadata
       });
 
       // Fast return of just the URL rather than extra metadata
       return NextResponse.json({ url: session.url });
     } catch (stripeError: any) {
+      console.error('Stripe error:', stripeError);
       // Simplified error response
       return NextResponse.json(
-        { error: `Payment service error` },
+        { error: `Payment service error: ${stripeError.message}` },
         { status: 500 }
       );
     }
   } catch (error: any) {
+    console.error('Subscription request error:', error);
     return NextResponse.json(
       { error: 'Failed to process subscription request' },
       { status: 500 }
