@@ -29,7 +29,7 @@ export async function POST(request: Request) {
   // For development environment, always return a successful mock response if no key
   if (process.env.NODE_ENV === 'development' && (!stripeSecretKey || stripeSecretKey === DUMMY_TEST_KEY)) {
     return NextResponse.json({ 
-      url: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/dashboard?success=true&session_id=dev_session_123&mock=true`,
+      url: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/timeline?success=true&session_id=dev_session_123&mock=true`,
       development: true
     });
   }
