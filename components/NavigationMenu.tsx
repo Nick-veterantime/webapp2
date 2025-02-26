@@ -42,6 +42,7 @@ export function NavigationMenu({
     propUserData?.separationDate ? new Date(propUserData.separationDate) : new Date()
   );
   const router = useRouter();
+  const [isLoading, setIsLoading] = useState(false);
 
   // Fetch user data when component mounts
   useEffect(() => {
@@ -165,6 +166,97 @@ export function NavigationMenu({
     }
   };
 
+  // Handle subscription to premium
+  const handleSubscribe = async () => {
+    // Prevent multiple clicks
+    if (isLoading) return;
+    
+    try {
+      setIsLoading(true);
+      
+      // Create a short-lived toast that will be automatically dismissed
+      toast.loading('Preparing checkout...', { 
+        id: 'checkout',
+        duration: 3000 // Auto-dismiss after 3 seconds if redirect doesn't happen
+      });
+      
+      // Basic user info for tracking
+      const userData: {
+        timestamp: string;
+        source: string;
+        returnUrl: string;
+        email?: string;
+        userId?: string;
+      } = {
+        timestamp: new Date().toISOString(),
+        source: 'navigation_menu',
+        returnUrl: window.location.href // Return to the current page
+      };
+      
+      // Add auth data if available - but don't await this if it takes too long
+      const authPromise = auth.getSession().then(({ data: { session } }: { data: { session: any } }) => {
+        if (session?.user) {
+          userData.email = session.user.email;
+          userData.userId = session.user.id;
+        }
+      }).catch((err: Error) => {
+        console.warn('Could not get session data:', err);
+        // Continue without auth data
+      });
+      
+      // Set a timeout to ensure we don't wait too long for auth
+      const timeoutPromise = new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Wait for auth data but not more than 1 second
+      await Promise.race([authPromise, timeoutPromise]);
+      
+      // Make the API request
+      const response = await fetch('/api/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(userData)
+      });
+      
+      // Handle the response
+      const result = await response.json();
+      
+      if (!response.ok) {
+        console.error('API error response:', result);
+        throw new Error(result.error || 'Failed to create checkout session');
+      }
+      
+      if (!result.url) {
+        throw new Error('No checkout URL received');
+      }
+      
+      // Dismiss the loading toast and show success message
+      toast.dismiss('checkout');
+      toast.success('Redirecting to checkout...', { duration: 1500 });
+      
+      // Redirect with a short timeout to allow the success toast to be seen
+      setTimeout(() => {
+        window.location.href = result.url;
+      }, 300);
+      
+    } catch (error) {
+      console.error('Subscription error:', error);
+      
+      let errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      
+      // More user-friendly error messages
+      if (errorMessage.includes('configuration')) {
+        errorMessage = 'Configuration issue. Our team has been notified.';
+      }
+      
+      toast.error(`Checkout failed: ${errorMessage}`, { 
+        id: 'checkout',
+        duration: 5000
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="relative">
       {/* Hamburger Button */}
@@ -201,7 +293,7 @@ export function NavigationMenu({
               role="menuitem"
             >
               <span className="w-1 h-1 rounded-full bg-gray-500 group-hover:bg-blue-400 transition-colors"></span>
-              Personalization Settings
+              Account
             </button>
             {showMobileMenu && (
               <>
@@ -254,13 +346,63 @@ export function NavigationMenu({
         <DialogContent className="bg-[#1A1B1E] text-gray-200 border-gray-700 max-w-2xl max-h-[90vh] overflow-y-auto">
           <div className="sticky top-0 bg-[#1A1B1E] pt-6 pb-2 z-10 px-6 mr-6">
             <DialogHeader>
-              <DialogTitle className="text-xl font-semibold text-gray-200">Personalization Settings</DialogTitle>
+              <DialogTitle className="text-xl font-semibold text-gray-200">Account</DialogTitle>
               <DialogDescription className="text-gray-400">
-                Review and update your transition preferences
+                Manage your account and preferences
               </DialogDescription>
             </DialogHeader>
           </div>
           <div className="space-y-6 px-6 pb-6">
+            {/* Billing Section */}
+            <div className="border border-gray-700 rounded-lg p-4">
+              <h3 className="text-lg font-medium text-gray-200 mb-4">Billing</h3>
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-400">Status</span>
+                  <span className={`text-sm font-medium ${editingUserData?.is_premium ? 'text-green-400' : 'text-yellow-400'}`}>
+                    {editingUserData?.is_premium ? 'Premium' : 'Free'}
+                  </span>
+                </div>
+                
+                {editingUserData?.is_premium && (
+                  <>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-400">Renewal Date</span>
+                      <span className="text-sm text-gray-200">
+                        {editingUserData?.subscription_period_end ? 
+                          format(new Date(editingUserData.subscription_period_end), 'MMMM d, yyyy') : 
+                          'Lifetime Access'}
+                      </span>
+                    </div>
+                    <div className="mt-2 pt-2 border-t border-gray-700">
+                      <button 
+                        className="text-sm text-red-400 hover:text-red-300 transition-colors"
+                        onClick={() => {
+                          // TODO: Implement unsubscribe functionality
+                          toast.info("Unsubscribe functionality coming soon");
+                        }}
+                      >
+                        Unsubscribe
+                      </button>
+                    </div>
+                  </>
+                )}
+                
+                {!editingUserData?.is_premium && (
+                  <div className="mt-2 pt-2 border-t border-gray-700">
+                    <button 
+                      className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
+                      onClick={handleSubscribe}
+                      disabled={isLoading}
+                    >
+                      {isLoading ? 'Loading...' : 'Upgrade to Premium'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            <h3 className="text-lg font-medium text-gray-200">Personalization Settings</h3>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-400 mb-2">Separation Date</label>

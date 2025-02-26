@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
+import { supabase } from '@/lib/supabase';
 
 // Use a dummy test key for development if no key is provided
 // (This is just for local development and won't work for actual charges)
@@ -53,9 +54,22 @@ export async function POST(request: Request) {
       timestamp: new Date().toISOString(),
     };
 
-    // Only add user info to metadata if available, keeping it minimal
+    // Add user info from request to metadata
     if (requestData.email) metadata.email = requestData.email;
     if (requestData.userId) metadata.userId = requestData.userId;
+
+    // Try to get session data if available
+    try {
+      const { data, error } = await supabase.auth.getSession();
+      if (!error && data.session?.user) {
+        // Add user info from session to metadata
+        metadata.email = data.session.user.email || requestData.email;
+        metadata.userId = data.session.user.id || requestData.userId;
+      }
+    } catch (err) {
+      console.warn('Could not get session data:', err);
+      // Continue with request data
+    }
 
     // Try to get price ID from environment, or from product's default_price
     let priceId = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID || process.env.STRIPE_PRICE_ID;

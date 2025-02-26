@@ -15,6 +15,10 @@ export interface UserData {
   educationLevel?: string;
   separationDate: string;
   is_premium?: boolean;
+  stripe_customer_id?: string;
+  subscription_status?: string;
+  subscription_period_start?: string;
+  subscription_period_end?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -56,6 +60,10 @@ export async function updateUserData(userData: UserData, options: UpdateOptions 
           education_level: userData.educationLevel,
           separation_date: userData.separationDate,
           is_premium: userData.is_premium,
+          stripe_customer_id: userData.stripe_customer_id,
+          subscription_status: userData.subscription_status,
+          subscription_period_start: userData.subscription_period_start,
+          subscription_period_end: userData.subscription_period_end,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
@@ -79,6 +87,10 @@ export async function updateUserData(userData: UserData, options: UpdateOptions 
           education_level: userData.educationLevel,
           separation_date: userData.separationDate,
           is_premium: userData.is_premium,
+          stripe_customer_id: userData.stripe_customer_id,
+          subscription_status: userData.subscription_status,
+          subscription_period_start: userData.subscription_period_start,
+          subscription_period_end: userData.subscription_period_end,
           updated_at: new Date().toISOString()
         })
         .eq('user_id', session.user.id)
@@ -128,6 +140,10 @@ export async function getUserData(): Promise<UserData | null> {
       educationLevel: data.education_level,
       separationDate: data.separation_date,
       is_premium: data.is_premium || false,
+      stripe_customer_id: data.stripe_customer_id,
+      subscription_status: data.subscription_status,
+      subscription_period_start: data.subscription_period_start,
+      subscription_period_end: data.subscription_period_end,
       createdAt: data.created_at,
       updatedAt: data.updated_at
     };

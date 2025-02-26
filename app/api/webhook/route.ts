@@ -49,19 +49,85 @@ export async function POST(request: Request) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
         const userId = session.metadata?.userId;
+        const customerEmail = session.customer_email;
+        const customerId = session.customer as string;
 
         if (userId) {
-          // Update user's premium status
+          // Update user's premium status with subscription details
           const { error } = await supabase
             .from('user_data')
-            .update({ is_premium: true })
+            .update({ 
+              is_premium: true,
+              stripe_customer_id: customerId
+            })
             .eq('user_id', userId);
 
           if (error) {
             console.error('Error updating premium status:', error);
             return NextResponse.json({ error: 'Failed to update premium status' }, { status: 500 });
           }
+        } else if (customerEmail) {
+          // Try to find user by email if userId is not in metadata
+          const { data: userData, error: userError } = await supabase
+            .from('users')
+            .select('id')
+            .eq('email', customerEmail)
+            .single();
+
+          if (!userError && userData) {
+            const { error } = await supabase
+              .from('user_data')
+              .update({ 
+                is_premium: true,
+                stripe_customer_id: customerId
+              })
+              .eq('user_id', userData.id);
+
+            if (error) {
+              console.error('Error updating premium status by email:', error);
+            }
+          }
         }
+        break;
+      }
+
+      case 'customer.subscription.created':
+      case 'customer.subscription.updated': {
+        const subscription = event.data.object as Stripe.Subscription;
+        const customerId = subscription.customer as string;
+        
+        // Get current period end as timestamp
+        const currentPeriodEnd = new Date(subscription.current_period_end * 1000).toISOString();
+        const currentPeriodStart = new Date(subscription.current_period_start * 1000).toISOString();
+        const status = subscription.status;
+        
+        // Find the customer in our database
+        const { data: userData, error: userDataError } = await supabase
+          .from('user_data')
+          .select('user_id')
+          .eq('stripe_customer_id', customerId)
+          .single();
+          
+        if (userDataError || !userData) {
+          console.error('Error finding user with customer ID:', customerId);
+          break;
+        }
+        
+        // Update subscription details
+        const { error: updateError } = await supabase
+          .from('user_data')
+          .update({
+            subscription_status: status,
+            subscription_period_start: currentPeriodStart,
+            subscription_period_end: currentPeriodEnd,
+            is_premium: status === 'active' || status === 'trialing'
+          })
+          .eq('stripe_customer_id', customerId);
+          
+        if (updateError) {
+          console.error('Error updating subscription details:', updateError);
+        }
+        
         break;
       }
 

@@ -52,24 +52,47 @@ function TimelinePageContent() {
         });
         
         // Refresh user data in the background and update premium status
-        getUserData().then(async data => {
-          if (data) {
-            // Create updated user data with premium flag set to true
-            const updatedUserData = {...data, is_premium: true};
+        const updatePremiumStatus = async () => {
+          try {
+            // First check if user is authenticated
+            const { data: { session }, error: sessionError } = await auth.getSession();
+            if (sessionError) throw sessionError;
             
-            // Update the user data in the database
-            try {
+            if (!session || !session.user) {
+              console.error('No authenticated user found when updating premium status');
+              return;
+            }
+            
+            // Get the user's email
+            const userEmail = session.user.email;
+            const userId = session.user.id;
+            
+            // Get current user data
+            const data = await getUserData();
+            if (data) {
+              // Create updated user data with premium flag set to true
+              const updatedUserData = {
+                ...data,
+                is_premium: true,
+                // Set current date as start date if there isn't one already
+                subscription_period_start: data.subscription_period_start || new Date().toISOString(),
+                // Set default subscription end date (1 year from now) if there isn't one already
+                subscription_period_end: data.subscription_period_end || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
+              };
+              
+              // Update the user data in the database
               await updateUserData(updatedUserData);
-              console.log('Premium status updated in database');
+              console.log('Premium status updated in database for user:', userId);
+              
               // Update local state
               setUserData(updatedUserData);
-            } catch (err) {
-              console.error('Error updating premium status in database:', err);
             }
+          } catch (err) {
+            console.error('Error updating premium status in database:', err);
           }
-        }).catch(err => {
-          console.error('Error refreshing user data after subscription:', err);
-        });
+        };
+        
+        updatePremiumStatus();
       } else if (isCanceled) {
         toast.error('Subscription canceled', {
           description: 'Your subscription was not completed.',
