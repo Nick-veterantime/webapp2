@@ -33,14 +33,16 @@ import { updateUserData, UserData } from '../lib/user-data';
 interface Task {
   id: string;
   title: string;
-  priority: 'low' | 'medium' | 'high';
+  priority: string;
   completed: boolean;
-  linkedText: string;
-  link: string;
-  description: string;
+  linkedText?: string;
+  link?: string;
+  description?: string;
   trackIds: string[];
   whenMonthsLeft: number[];
   branchIds: string[];
+  location?: string | null;
+  locationType?: string | null;
 }
 
 interface UserInfo {
@@ -54,7 +56,7 @@ interface UserInfo {
 }
 
 const tracks = ['Mindset', 'Admin', 'Health', 'Job', 'Misc'];
-const monthsList = [60, 24, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
+const monthsList = [60, 48, 36, 24, 18, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0];
 
 const defaultBars: TimelineBarData[] = [
   {
@@ -526,8 +528,10 @@ const Timeline: React.FC<TimelineProps> = ({
 
   const getTasksForTrackAndMonth = (tasks: Task[], track: string, monthsLeft: number): Task[] => {
     // Debug logging for branch filtering
-    console.log('Filtering tasks with user branch:', {
+    console.log('Filtering tasks with user data:', {
       userBranch: userData?.branch,
+      userLocation: userData?.location,
+      userLocationPreference: userData?.locationPreference,
       availableTasks: tasks.length,
       trackFilter: track,
       monthFilter: monthsLeft
@@ -578,6 +582,29 @@ const Timeline: React.FC<TimelineProps> = ({
           ) 
         : false);
       
+      // Location filtering - hide tasks with location requirements if user hasn't specified interest
+      let locationMatch = true;
+      if (task.location) {
+        // Only show location-specific tasks if:
+        // 1. User has specified "I have a specific location in mind" AND the location matches, or
+        // 2. User has specified "I'm considering a few options"
+        locationMatch = 
+          (userData?.locationPreference === 'i have a specific location in mind' && 
+           userData?.location && 
+           task.location === userData.location) ||
+          userData?.locationPreference === 'i\'m considering a few options';
+        
+        // Log location filtering
+        if (!locationMatch) {
+          console.log('Task filtered out by location:', {
+            taskTitle: task.title,
+            taskLocation: task.location,
+            userLocationPref: userData?.locationPreference,
+            userLocation: userData?.location
+          });
+        }
+      }
+      
       // Add debug logging for rejected tasks
       if (trackMatch && monthMatch && !branchMatch && userData?.branch) {
         console.log('Task filtered out by branch:', {
@@ -587,7 +614,7 @@ const Timeline: React.FC<TimelineProps> = ({
         });
       }
       
-      return trackMatch && monthMatch && branchMatch;
+      return trackMatch && monthMatch && branchMatch && locationMatch;
     });
   };
 

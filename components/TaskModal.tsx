@@ -4,14 +4,16 @@ import { Lock } from 'lucide-react';
 interface Task {
   id: string;
   title: string;
-  priority: 'low' | 'medium' | 'high';
+  priority: string;
   completed: boolean;
-  linkedText: string;
-  link: string;
-  description: string;
+  linkedText?: string;
+  link?: string;
+  description?: string;
   trackIds: string[];
   whenMonthsLeft: number[];
   branchIds: string[];
+  location?: string | null;
+  locationType?: string | null;
 }
 
 interface TaskModalProps {

@@ -104,7 +104,9 @@ export async function GET() {
         description: fields['Description'] || '',
         trackIds,
         whenMonthsLeft,
-        branchIds
+        branchIds,
+        location: fields['Location'] || null,
+        locationType: fields['Location Type'] || null
       };
     });
 
