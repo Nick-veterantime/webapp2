@@ -51,10 +51,21 @@ function TimelinePageContent() {
           description: 'You now have access to the full 60-month timeline.',
         });
         
-        // Refresh user data in the background
-        getUserData().then(data => {
+        // Refresh user data in the background and update premium status
+        getUserData().then(async data => {
           if (data) {
-            setUserData({...data, is_premium: true});
+            // Create updated user data with premium flag set to true
+            const updatedUserData = {...data, is_premium: true};
+            
+            // Update the user data in the database
+            try {
+              await updateUserData(updatedUserData);
+              console.log('Premium status updated in database');
+              // Update local state
+              setUserData(updatedUserData);
+            } catch (err) {
+              console.error('Error updating premium status in database:', err);
+            }
           }
         }).catch(err => {
           console.error('Error refreshing user data after subscription:', err);
