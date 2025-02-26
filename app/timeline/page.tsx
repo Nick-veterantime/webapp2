@@ -118,7 +118,9 @@ function TimelinePageContent() {
       });
       
       // Immediately update premium status in UI
-      updatePremiumStatus(true);
+      if (userData) {
+        updatePremiumStatus(true);
+      }
       
       // Clear URL parameters without refreshing page
       const url = new URL(window.location.href);
@@ -126,34 +128,52 @@ function TimelinePageContent() {
       url.searchParams.delete('session_id');
       window.history.replaceState({}, '', url.toString());
       
-      // Simplified premium activation approach
-      // Just make the API call and don't wait for it to complete
-      // The UI is already updated to premium status
-      fetch('/api/premium/activate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          sessionId,
-          // Include any user info we might have, but don't require it
-          ...(userData?.id ? { userId: userData.id } : {}),
-          ...(userData?.email ? { email: userData.email } : {})
-        })
-      })
-      .then(res => {
-        if (!res.ok) {
-          console.error('Premium activation API call failed, but UI is still updated', res.status);
-          // Even if the API call fails, we don't need to show an error to the user
-          // The UI is already updated and they can use premium features
+      // Make the API call immediately without waiting for user data
+      // This prevents the endless spinning circle
+      const activatePremium = async () => {
+        try {
+          // Get current session if needed
+          let userId = userData?.id;
+          let email = userData?.email;
+          
+          if (!userId || !email) {
+            // If userData not available, try to get it from the session
+            try {
+              const { data: { session } } = await auth.getSession();
+              if (session?.user) {
+                userId = session.user.id;
+                email = session.user.email;
+              }
+            } catch (err) {
+              console.error('Failed to get session for premium activation:', err);
+            }
+          }
+          
+          const response = await fetch('/api/premium/activate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              sessionId,
+              ...(userId ? { userId } : {}),
+              ...(email ? { email } : {})
+            })
+          });
+          
+          if (!response.ok) {
+            console.error('Premium activation API call failed, but UI is still updated', response.status);
+            // Even if the API call fails, we don't need to show an error to the user
+          }
+          
+          const data = await response.json().catch(() => ({}));
+          console.log('Premium activation attempt completed', data);
+        } catch (err) {
+          console.error('Error during premium activation API call', err);
+          // No user-facing error needed, the UI is already updated
         }
-        return res.json().catch(() => ({}));
-      })
-      .then(data => {
-        console.log('Premium activation attempt completed', data);
-      })
-      .catch(err => {
-        console.error('Error during premium activation API call', err);
-        // No user-facing error needed, the UI is already updated
-      });
+      };
+      
+      // Call the activation function but don't wait for it
+      activatePremium();
     }
     
     // Handle canceled state
@@ -169,7 +189,7 @@ function TimelinePageContent() {
       url.searchParams.delete('canceled');
       window.history.replaceState({}, '', url.toString());
     }
-  }, [userData]);
+  }, []); // Remove userData dependency
 
   useEffect(() => {
     let mounted = true;
