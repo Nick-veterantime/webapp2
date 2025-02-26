@@ -93,8 +93,25 @@ function TimelinePageContent() {
     const sessionId = searchParams.get('session_id');
     const canceled = searchParams.get('canceled');
     
+    // Check if we were in a Stripe checkout flow
+    const wasInCheckout = sessionStorage.getItem('stripe_checkout_in_progress');
+    
+    // If coming back from Stripe but no parameters, treat as cancellation
+    if (wasInCheckout && !success && !canceled) {
+      toast.info('Payment process was interrupted', { duration: 3000 });
+      // Clear our checkout flag
+      sessionStorage.removeItem('stripe_checkout_in_progress');
+      // Dismiss any lingering loading toasts
+      toast.dismiss('premium-activation');
+      toast.dismiss('checkout');
+      return;
+    }
+    
     // Handle Stripe redirect status
     if (success && sessionId) {
+      // Clear the checkout flag
+      sessionStorage.removeItem('stripe_checkout_in_progress');
+      
       // Show loading toast with a timeout (will auto-dismiss after 10 seconds)
       const loadingToast = toast.loading('Activating premium features...', {
         duration: 10000, // Auto-dismiss after 10 seconds as a fallback
@@ -164,6 +181,8 @@ function TimelinePageContent() {
     }
     
     if (canceled) {
+      // Clear the checkout flag
+      sessionStorage.removeItem('stripe_checkout_in_progress');
       toast.error('Premium subscription was canceled.');
       
       // Clear URL parameters without refreshing page

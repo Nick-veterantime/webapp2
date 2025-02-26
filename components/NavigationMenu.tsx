@@ -227,6 +227,9 @@ export function NavigationMenu({
       toast.dismiss('checkout');
       toast.success('Redirecting to checkout...', { duration: 1500 });
       
+      // Set flag to track that we're in the Stripe checkout flow
+      sessionStorage.setItem('stripe_checkout_in_progress', 'true');
+      
       // Redirect with a short timeout to allow the success toast to be seen
       setTimeout(() => {
         window.location.href = result.url;
