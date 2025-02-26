@@ -97,7 +97,8 @@ function TimelinePageContent() {
     if (success && sessionId) {
       // Show loading toast with a timeout (will auto-dismiss after 10 seconds)
       const loadingToast = toast.loading('Activating premium features...', {
-        duration: 10000 // Auto-dismiss after 10 seconds as a fallback
+        duration: 10000, // Auto-dismiss after 10 seconds as a fallback
+        id: 'premium-activation' // Add a unique ID to ensure we can dismiss it later
       });
       
       // First attempt - refresh user data normally
@@ -147,6 +148,7 @@ function TimelinePageContent() {
             // Ensure the toast is always dismissed regardless of outcome
             setTimeout(() => {
               toast.dismiss(loadingToast);
+              toast.dismiss('premium-activation');
             }, 1000);
           });
         }
@@ -156,6 +158,7 @@ function TimelinePageContent() {
         // Ensure the toast is dismissed even if the refresh fails
         setTimeout(() => {
           toast.dismiss(loadingToast);
+          toast.dismiss('premium-activation');
         }, 1000);
       });
     }

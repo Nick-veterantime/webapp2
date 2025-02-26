@@ -103,6 +103,15 @@ export async function POST(req: NextRequest) {
         .update(subscriptionData)
         .eq('user_id', userRecord.user_id)
         .select();
+        
+      // Force cache invalidation by updating auth metadata
+      try {
+        await supabase.auth.updateUser({
+          data: { has_premium: true, updated_at: new Date().toISOString() }
+        });
+      } catch (err) {
+        console.warn('Could not update auth metadata, continuing with updated user data');
+      }
     } else if (userId) {
       // Create new user data entry
       console.log('Creating new user data with premium status for userId:', userId);
@@ -134,6 +143,15 @@ export async function POST(req: NextRequest) {
           created_at: existingUser?.created_at || new Date().toISOString()
         })
         .select();
+        
+      // Force cache invalidation by updating auth metadata
+      try {
+        await supabase.auth.updateUser({
+          data: { has_premium: true, updated_at: new Date().toISOString() }
+        });
+      } catch (err) {
+        console.warn('Could not update auth metadata, continuing with updated user data');
+      }
     } else if (session) {
       // Create new user data entry with session user
       const userId = session.user.id;

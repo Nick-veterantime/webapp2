@@ -226,7 +226,25 @@ const Timeline: React.FC<TimelineProps> = ({
     taskFilterCache.current = {};
   }, [tasks, userData]);
 
+  // Memoize resetSubscriptionState to avoid recreating it
   const resetSubscriptionState = useCallback(() => {
+    // Don't log in production
+    if (process.env.NODE_ENV !== 'development') {
+      // Silently reset without logging
+      toast.dismiss('subscription');
+      setIsLoading(false);
+      subscriptionAttemptRef.current = false;
+      
+      if (isTaskModalOpen && searchParams.get('canceled') === 'true') {
+        setTimeout(() => {
+          setIsTaskModalOpen(false);
+          setSelectedTask(null);
+        }, 100);
+      }
+      return;
+    }
+    
+    // Only log in development mode
     console.log('Resetting subscription state completely');
     toast.dismiss('subscription');
     setIsLoading(false);
@@ -245,7 +263,10 @@ const Timeline: React.FC<TimelineProps> = ({
     
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        console.log('Tab became visible again, resetting subscription state');
+        // Don't log in production
+        if (process.env.NODE_ENV === 'development') {
+          console.log('Tab became visible again, resetting subscription state');
+        }
         resetSubscriptionState();
       }
     };
@@ -262,13 +283,19 @@ const Timeline: React.FC<TimelineProps> = ({
     const success = searchParams.get('success');
     
     if (canceled === 'true') {
-      console.log('User returned from Stripe after canceling');
+      // Don't log in production
+      if (process.env.NODE_ENV === 'development') {
+        console.log('User returned from Stripe after canceling');
+      }
       resetSubscriptionState();
-      toast.info('Subscription process was canceled', { duration: 3000 });
+      toast.info('Subscription process was canceled', { duration: 3000, id: 'subscription-canceled' });
     } else if (success === 'true') {
-      console.log('User returned from Stripe after successful payment');
+      // Don't log in production
+      if (process.env.NODE_ENV === 'development') {
+        console.log('User returned from Stripe after successful payment');
+      }
       resetSubscriptionState();
-      toast.success('Thank you for subscribing!', { duration: 5000 });
+      // Don't show toast here - it's handled in the timeline page component
     }
   }, [searchParams, resetSubscriptionState]);
 
@@ -822,6 +849,7 @@ const Timeline: React.FC<TimelineProps> = ({
     e.preventDefault();
     e.stopPropagation();
     
+    // Check premium status once from props rather than re-checking
     if (!isPremium) {
       setShowPaywallModal(true);
       return;
@@ -894,6 +922,37 @@ const Timeline: React.FC<TimelineProps> = ({
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [loading]);
+
+  // Memoize isPremium state to avoid redundant checks
+  const isPremiumUser = useMemo(() => {
+    return isPremium === true;
+  }, [isPremium]);
+  
+  // Handle task click for all card interactions
+  const handleCardClick = useCallback((task: Task) => {
+    handleTaskClick(task);
+  }, [handleTaskClick]);
+  
+  // Render the task cards with premium status check at render time
+  const renderTaskCard = useCallback((task: Task, month: any) => {
+    return (
+      <button 
+        key={`${task.id}-${month.monthsLeft}`}
+        className="w-full text-left"
+        onClick={() => handleCardClick(task)}
+      >
+        <div className="p-2 rounded-lg bg-gray-800/50 hover:bg-gray-800 transition-colors cursor-pointer border border-gray-700/50">
+          <p className="text-sm text-gray-200 line-clamp-2 leading-relaxed">{task.title}</p>
+          {task.link && !isPremiumUser && (
+            <div className="mt-1 flex items-center text-xs text-gray-400">
+              <Lock className="w-3 h-3 mr-1" />
+              <span>Premium</span>
+            </div>
+          )}
+        </div>
+      </button>
+    );
+  }, [handleCardClick, isPremiumUser]);
 
   if (loading) {
     return (
@@ -1063,10 +1122,16 @@ const Timeline: React.FC<TimelineProps> = ({
                                 <button 
                                   key={`${task.id}-${month.monthsLeft}`}
                                   className="w-full text-left"
-                                  onClick={() => handleTaskClick(task)}
+                                  onClick={() => handleCardClick(task)}
                                 >
                                   <div className="p-2 rounded-lg bg-gray-800/50 hover:bg-gray-800 transition-colors cursor-pointer border border-gray-700/50">
                                     <p className="text-sm text-gray-200 line-clamp-2 leading-relaxed">{task.title}</p>
+                                    {task.link && !isPremiumUser && (
+                                      <div className="mt-1 flex items-center text-xs text-gray-400">
+                                        <Lock className="w-3 h-3 mr-1" />
+                                        <span>Premium</span>
+                                      </div>
+                                    )}
                                   </div>
                                 </button>
                               ))}
