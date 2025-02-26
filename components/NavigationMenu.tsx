@@ -66,11 +66,13 @@ export function NavigationMenu({
 
   // Update local state when prop changes
   useEffect(() => {
-    setEditingUserData(propUserData);
+    if (propUserData) {
+      setEditingUserData(propUserData);
+    }
     if (propUserData?.separationDate) {
       setSelectedDate(new Date(propUserData.separationDate));
     }
-  }, [propUserData]);
+  }, [propUserData]); // This will react to all prop changes, including premium status
 
   // Update selectedDate when editingUserData changes
   useEffect(() => {

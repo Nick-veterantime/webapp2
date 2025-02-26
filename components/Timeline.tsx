@@ -943,12 +943,6 @@ const Timeline: React.FC<TimelineProps> = ({
       >
         <div className="p-2 rounded-lg bg-gray-800/50 hover:bg-gray-800 transition-colors cursor-pointer border border-gray-700/50">
           <p className="text-sm text-gray-200 line-clamp-2 leading-relaxed">{task.title}</p>
-          {task.link && !isPremiumUser && (
-            <div className="mt-1 flex items-center text-xs text-gray-400">
-              <Lock className="w-3 h-3 mr-1" />
-              <span>Premium</span>
-            </div>
-          )}
         </div>
       </button>
     );
@@ -1126,12 +1120,6 @@ const Timeline: React.FC<TimelineProps> = ({
                                 >
                                   <div className="p-2 rounded-lg bg-gray-800/50 hover:bg-gray-800 transition-colors cursor-pointer border border-gray-700/50">
                                     <p className="text-sm text-gray-200 line-clamp-2 leading-relaxed">{task.title}</p>
-                                    {task.link && !isPremiumUser && (
-                                      <div className="mt-1 flex items-center text-xs text-gray-400">
-                                        <Lock className="w-3 h-3 mr-1" />
-                                        <span>Premium</span>
-                                      </div>
-                                    )}
                                   </div>
                                 </button>
                               ))}

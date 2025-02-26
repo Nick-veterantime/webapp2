@@ -101,10 +101,17 @@ function TimelinePageContent() {
         id: 'premium-activation' // Add a unique ID to ensure we can dismiss it later
       });
       
+      // Make sure to dismiss any lingering toast immediately
+      setTimeout(() => {
+        toast.dismiss('premium-activation');
+      }, 50);
+      
       // First attempt - refresh user data normally
       refreshUserData().then(userData => {
         if (userData?.is_premium) {
-          toast.success('Thank you for upgrading to Premium!', { id: loadingToast });
+          // Dismiss the loading toast and show success
+          toast.dismiss('premium-activation');
+          toast.success('Thank you for upgrading to Premium!', { id: 'premium-success' });
           updatePremiumStatus(true);
           
           // Clear URL parameters without refreshing page
@@ -126,8 +133,11 @@ function TimelinePageContent() {
           })
           .then(res => res.json())
           .then(data => {
+            // Always dismiss the loading toast first
+            toast.dismiss('premium-activation');
+            
             if (data.isPremium) {
-              toast.success('Thank you for upgrading to Premium!', { id: loadingToast });
+              toast.success('Thank you for upgrading to Premium!', { id: 'premium-success' });
               updatePremiumStatus(true);
               
               // Clear URL parameters without refreshing page
@@ -137,30 +147,38 @@ function TimelinePageContent() {
               window.history.replaceState({}, '', url.toString());
             } else {
               console.error('Failed to activate premium status directly', data);
-              toast.error('Something went wrong. Please contact support.', { id: loadingToast });
+              toast.error('Something went wrong. Please contact support.', { id: 'activation-error' });
             }
           })
           .catch((err: Error) => {
             console.error('Error activating premium status:', err);
-            toast.error('Something went wrong. Please contact support.', { id: loadingToast });
+            // Always dismiss the loading toast
+            toast.dismiss('premium-activation');
+            toast.error('Something went wrong. Please contact support.', { id: 'activation-error' });
           })
           .finally(() => {
-            // Ensure the toast is always dismissed regardless of outcome
+            // Triple-ensure the toast is always dismissed regardless of outcome
             setTimeout(() => {
-              toast.dismiss(loadingToast);
               toast.dismiss('premium-activation');
-            }, 1000);
+            }, 500);
           });
         }
       }).catch((err: Error) => {
         console.error('Error refreshing user data after payment:', err);
-        toast.error('Something went wrong. Please contact support.', { id: loadingToast });
+        // Always dismiss the loading toast
+        toast.dismiss('premium-activation');
+        toast.error('Something went wrong. Please contact support.', { id: 'activation-error' });
+        
         // Ensure the toast is dismissed even if the refresh fails
         setTimeout(() => {
-          toast.dismiss(loadingToast);
           toast.dismiss('premium-activation');
-        }, 1000);
+        }, 500);
       });
+      
+      // Final failsafe - ensure the toast is dismissed after a reasonable time
+      setTimeout(() => {
+        toast.dismiss('premium-activation');
+      }, 15000);
     }
     
     if (canceled) {
