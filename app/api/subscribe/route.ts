@@ -10,10 +10,16 @@ const stripeSecretKey = process.env.STRIPE_SECRET_KEY || (process.env.NODE_ENV =
 // Pre-initialize Stripe outside the request handler for better performance
 let stripe: Stripe | null = null;
 try {
-  stripe = new Stripe(stripeSecretKey, {
-    apiVersion: '2025-02-24.acacia',
-    typescript: true,
-  });
+  if (stripeSecretKey && stripeSecretKey !== DUMMY_TEST_KEY) {
+    stripe = new Stripe(stripeSecretKey, {
+      apiVersion: '2025-02-24.acacia',
+      typescript: true,
+    });
+  } else if (process.env.NODE_ENV === 'development') {
+    console.warn('Using mock Stripe client in development mode');
+  } else {
+    console.error('Missing Stripe API key in production environment');
+  }
 } catch (error) {
   // Don't crash the app if Stripe init fails (could be missing key in dev)
   console.warn('Stripe initialization failed, will use mock responses in development');
@@ -27,7 +33,7 @@ const PRODUCT_ID = 'prod_RpRs6B7R7Xp39n';
 
 export async function POST(request: Request) {
   // For development environment, return a mock success response
-  if (process.env.NODE_ENV === 'development' && process.env.MOCK_STRIPE === 'true') {
+  if (process.env.NODE_ENV === 'development') {
     console.log('Using mock Stripe response for development');
     return NextResponse.json({
       url: `http://localhost:3000/timeline?success=true&session_id=dev_session_123&mock=true`,

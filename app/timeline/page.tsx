@@ -140,7 +140,7 @@ function TimelinePageContent() {
               toast.error('Something went wrong. Please contact support.', { id: loadingToast });
             }
           })
-          .catch((err: Error) => {
+          .catch((err) => {
             console.error('Error activating premium status:', err);
             toast.error('Something went wrong. Please contact support.', { id: loadingToast });
           })
@@ -152,7 +152,7 @@ function TimelinePageContent() {
             }, 1000);
           });
         }
-      }).catch((err: Error) => {
+      }).catch((err) => {
         console.error('Error refreshing user data after payment:', err);
         toast.error('Something went wrong. Please contact support.', { id: loadingToast });
         // Ensure the toast is dismissed even if the refresh fails
