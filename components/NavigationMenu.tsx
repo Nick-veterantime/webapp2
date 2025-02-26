@@ -353,7 +353,7 @@ export function NavigationMenu({
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-400">Status</span>
-                  <span className={`text-sm font-medium ${editingUserData?.is_premium ? 'text-green-400' : 'text-yellow-400'}`}>
+                  <span className={`text-sm font-medium px-2 py-1 rounded-full ${editingUserData?.is_premium ? 'text-green-400 bg-green-900/20' : 'text-yellow-400 bg-yellow-900/20'}`}>
                     {editingUserData?.is_premium ? 'Premium' : 'Free'}
                   </span>
                 </div>
@@ -385,12 +385,15 @@ export function NavigationMenu({
                 {!editingUserData?.is_premium && (
                   <div className="mt-2 pt-2 border-t border-gray-700">
                     <button 
-                      className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
+                      className="w-full text-sm text-white bg-blue-600 hover:bg-blue-500 px-3 py-2 rounded-md transition-colors"
                       onClick={handleSubscribe}
                       disabled={isLoading}
                     >
                       {isLoading ? 'Loading...' : 'Upgrade to Premium'}
                     </button>
+                    <p className="text-xs text-gray-400 mt-1">
+                      Get full access to all resources for $30/year
+                    </p>
                   </div>
                 )}
               </div>

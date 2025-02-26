@@ -26,11 +26,11 @@ export const runtime = 'edge';
 const PRODUCT_ID = 'prod_RpRs6B7R7Xp39n';
 
 export async function POST(request: Request) {
-  // For development environment, always return a successful mock response if no key
-  if (process.env.NODE_ENV === 'development' && (!stripeSecretKey || stripeSecretKey === DUMMY_TEST_KEY)) {
-    return NextResponse.json({ 
+  // For development environment, return a mock success response
+  if (process.env.NODE_ENV === 'development' && process.env.MOCK_STRIPE === 'true') {
+    console.log('Using mock Stripe response for development');
+    return NextResponse.json({
       url: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/timeline?success=true&session_id=dev_session_123&mock=true`,
-      development: true
     });
   }
 
@@ -123,8 +123,8 @@ export async function POST(request: Request) {
         ],
         mode: 'subscription',
         customer_email: metadata.email || requestData.email,
-        success_url: `${returnUrl}?success=true&session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${returnUrl}?canceled=true`,
+        success_url: `${returnUrl || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/timeline?success=true&session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${returnUrl || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/timeline?canceled=true`,
         metadata
       });
 

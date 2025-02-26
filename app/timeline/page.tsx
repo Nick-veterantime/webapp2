@@ -12,6 +12,12 @@ import { TimelineBarData } from '@/components/TimelineBar';
 import { NavigationMenu } from '@/components/NavigationMenu';
 import { Timeline } from '@/components/Timeline';
 
+// Extended UserData interface to include id and email
+interface ExtendedUserData extends UserData {
+  id?: string;
+  email?: string;
+}
+
 // Loading component to use during suspense
 const Loading = () => (
   <div className="w-full h-screen flex items-center justify-center">
@@ -27,7 +33,7 @@ const DynamicTimeline = dynamic(() => import('@/components/Timeline').then(mod =
 
 // Component that uses useSearchParams internally
 function TimelinePageContent() {
-  const [userData, setUserData] = useState<UserData | undefined>();
+  const [userData, setUserData] = useState<ExtendedUserData | undefined>();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
@@ -36,75 +42,121 @@ function TimelinePageContent() {
   const isSuccess = searchParams.get('success') === 'true';
   const isCanceled = searchParams.get('canceled') === 'true';
 
-  // Handle Stripe redirect status immediately
-  useEffect(() => {
-    if (isSuccess || isCanceled) {
-      // Immediately set loading to false to avoid showing loading spinner
-      setIsLoading(false);
+  // Function to refresh user data from the server
+  const refreshUserData = async (): Promise<ExtendedUserData | undefined> => {
+    try {
+      const { data: { session }, error: sessionError } = await auth.getSession();
+      if (sessionError) throw sessionError;
       
-      // Show appropriate toast notification
-      if (isSuccess) {
-        toast.success('Thank you for subscribing!', {
-          description: 'You now have access to the full 60-month timeline.',
-        });
-        
-        // Get the session ID from URL if available
-        const sessionId = searchParams.get('session_id');
-        const isMock = searchParams.get('mock') === 'true';
-        
-        // Refresh user data in the background and update premium status
-        const updatePremiumStatus = async () => {
-          try {
-            // First check if user is authenticated
-            const { data: { session }, error: sessionError } = await auth.getSession();
-            if (sessionError) throw sessionError;
-            
-            if (!session || !session.user) {
-              console.error('No authenticated user found when updating premium status');
-              return;
-            }
-            
-            const userId = session.user.id;
-            console.log('Updating premium status for user:', userId);
-            
-            // Get current user data
-            const data = await getUserData();
-            if (data) {
-              // Create updated user data with premium flag set to true
-              const updatedUserData = {
-                ...data,
-                is_premium: true,
-                // Set current date as start date if there isn't one already
-                subscription_period_start: data.subscription_period_start || new Date().toISOString(),
-                // Set default subscription end date (1 year from now) if there isn't one already
-                subscription_period_end: data.subscription_period_end || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
-              };
-              
-              // Update the user data in the database
-              await updateUserData(updatedUserData);
-              console.log('Premium status updated in database for user:', userId);
-              
-              // Update local state
-              setUserData(updatedUserData);
-            } else {
-              console.error('Could not find user data to update premium status');
-            }
-          } catch (err) {
-            console.error('Error updating premium status in database:', err);
-          }
-        };
-        
-        updatePremiumStatus();
-      } else if (isCanceled) {
-        toast.error('Subscription canceled', {
-          description: 'Your subscription was not completed.',
-        });
+      if (!session || !session.user) {
+        console.error('No authenticated user found when refreshing user data');
+        return undefined;
       }
       
-      // Remove the query parameter using router
-      router.replace('/timeline');
+      const data = await getUserData();
+      if (data) {
+        // Add id and email from session
+        const extendedData: ExtendedUserData = {
+          ...data,
+          id: session.user.id,
+          email: session.user.email
+        };
+        setUserData(extendedData);
+        return extendedData;
+      }
+      return undefined;
+    } catch (err) {
+      console.error('Error refreshing user data:', err);
+      return undefined;
     }
-  }, [isSuccess, isCanceled, router, searchParams]);
+  };
+  
+  // Function to update premium status
+  const updatePremiumStatus = (isPremium: boolean) => {
+    if (!userData) return;
+    
+    const updatedUserData = {
+      ...userData,
+      is_premium: isPremium
+    };
+    
+    setUserData(updatedUserData);
+    updateUserData(updatedUserData).catch(err => {
+      console.error('Error updating user data:', err);
+    });
+  };
+
+  // Handle Stripe redirect status
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const success = searchParams.get('success');
+    const sessionId = searchParams.get('session_id');
+    const canceled = searchParams.get('canceled');
+    
+    // Handle Stripe redirect status
+    if (success && sessionId) {
+      // Show loading toast
+      const loadingToast = toast.loading('Activating premium features...');
+      
+      // First attempt - refresh user data normally
+      refreshUserData().then(userData => {
+        if (userData?.is_premium) {
+          toast.success('Thank you for upgrading to Premium!', { id: loadingToast });
+          updatePremiumStatus(true);
+          
+          // Clear URL parameters without refreshing page
+          const url = new URL(window.location.href);
+          url.searchParams.delete('success');
+          url.searchParams.delete('session_id');
+          window.history.replaceState({}, '', url.toString());
+        } else {
+          console.log('User data not showing premium status yet, trying direct activation');
+          // Second attempt - call our activation endpoint directly
+          fetch('/api/premium/activate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              userId: userData?.id, 
+              email: userData?.email,
+              sessionId
+            })
+          })
+          .then(res => res.json())
+          .then(data => {
+            if (data.isPremium) {
+              toast.success('Thank you for upgrading to Premium!', { id: loadingToast });
+              updatePremiumStatus(true);
+              
+              // Clear URL parameters without refreshing page
+              const url = new URL(window.location.href);
+              url.searchParams.delete('success');
+              url.searchParams.delete('session_id');
+              window.history.replaceState({}, '', url.toString());
+            } else {
+              console.error('Failed to activate premium status directly', data);
+              toast.error('Something went wrong. Please contact support.', { id: loadingToast });
+            }
+          })
+          .catch((err: Error) => {
+            console.error('Error activating premium status:', err);
+            toast.error('Something went wrong. Please contact support.', { id: loadingToast });
+          });
+        }
+      }).catch((err: Error) => {
+        console.error('Error refreshing user data after payment:', err);
+        toast.error('Something went wrong. Please contact support.', { id: loadingToast });
+      });
+    }
+    
+    if (canceled) {
+      toast.error('Premium subscription was canceled.');
+      
+      // Clear URL parameters without refreshing page
+      const url = new URL(window.location.href);
+      url.searchParams.delete('canceled');
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, [userData]);
 
   useEffect(() => {
     let mounted = true;
